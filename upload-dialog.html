@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 16px; color: #333; font-size: 14px; }
+    .product-label { font-size: 0.8rem; color: #888; margin-bottom: 2px; }
+    .product-name { font-weight: bold; color: #FF9800; font-size: 1.05rem; margin-bottom: 14px; min-height: 20px; }
+    /* 種別選択ラジオ */
+    .type-selector { display: flex; gap: 8px; margin-bottom: 14px; }
+    .type-selector label {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+      border: 2px solid #e5e7eb; border-radius: 8px; padding: 8px 4px;
+      cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: 0.2s;
+    }
+    .type-selector input[type="radio"] { accent-color: #FF9800; }
+    .type-selector input[type="radio"]:checked + span { color: #FF9800; }
+    .type-selector label:has(input:checked) { border-color: #FF9800; background: #fff8f0; }
+    .type-hint { font-size: 0.75rem; color: #888; margin: -10px 0 12px; text-align: center; }
+    .file-area {
+      border: 2px dashed #ccc; border-radius: 10px; padding: 24px 16px;
+      text-align: center; cursor: pointer; margin-bottom: 12px; transition: 0.2s;
+    }
+    .file-area:hover { border-color: #FF9800; background: #fff8f0; }
+    .file-area .icon { font-size: 2rem; margin-bottom: 6px; }
+    .file-area .hint { font-size: 0.78rem; color: #999; margin-top: 4px; }
+    .preview { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .preview-item { position: relative; width: 72px; height: 72px; }
+    .preview-item img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .preview-item .remove { position: absolute; top: -6px; right: -6px; background: #dc2626; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .btn {
+      width: 100%; padding: 12px; background: #FF9800; color: white;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: bold;
+      cursor: pointer; transition: 0.2s;
+    }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { background: #e68900; }
+    .status { font-size: 0.85rem; color: #555; margin-top: 10px; min-height: 20px; text-align: center; }
+    .success { color: #10b981; font-weight: bold; }
+    .error-msg { color: #dc2626; }
+    .progress-bar-wrap { background: #e5e7eb; border-radius: 4px; height: 6px; margin-top: 8px; }
+    .progress-bar { background: #FF9800; border-radius: 4px; height: 6px; transition: width 0.3s; }
+  </style>
+</head>
+<body>
+  <div class="product-label">対象商品</div>
+  <div class="product-name" id="product-name">読み込み中...</div>
+
+  <!-- 画像種別選択 -->
+  <div class="type-selector">
+    <label>
+      <input type="radio" name="img-type" value="thumbnail" checked onchange="onTypeChange()">
+      <span>🖼️ サムネイル画像</span>
+    </label>
+    <label>
+      <input type="radio" name="img-type" value="detail" onchange="onTypeChange()">
+      <span>📷 詳細画像</span>
+    </label>
+  </div>
+  <div class="type-hint" id="type-hint">商品一覧カードに表示される代表画像（1枚のみ・上書き）</div>
+
+  <div class="file-area" id="drop-area" onclick="document.getElementById('file-input').click()">
+    <div class="icon">🖼️</div>
+    <div>クリックして画像を選択</div>
+    <div class="hint" id="file-hint">JPG・PNG・WebP 対応 ／ 1枚のみ</div>
+    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="onFilesSelected(this.files)">
+  </div>
+
+  <div id="preview" class="preview"></div>
+
+  <button class="btn" id="upload-btn" onclick="uploadAll()" disabled>
+    アップロードしてURLをセルに挿入
+  </button>
+
+  <div id="status" class="status"></div>
+  <div class="progress-bar-wrap" id="progress-wrap" style="display:none;">
+    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+  </div>
+
+  <script>
+    let rowInfo = null;
+    let selectedFiles = [];
+
+    // アクティブ行の商品情報を取得
+    google.script.run
+      .withSuccessHandler(function(info) {
+        if (info.error) {
+          document.getElementById('product-name').textContent = info.error;
+          document.getElementById('product-name').className = 'product-name error-msg';
+          document.getElementById('upload-btn').disabled = true;
+          return;
+        }
+        rowInfo = info;
+        document.getElementById('product-name').textContent = info.productName;
+        // 列が存在しない場合は該当ラジオを無効化
+        if (!info.thumbnailCol) document.querySelector('input[value="thumbnail"]').disabled = true;
+        if (!info.detailCol) document.querySelector('input[value="detail"]').disabled = true;
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('product-name').textContent = 'エラー: ' + err.message;
+      })
+      .getActiveRowInfo();
+
+    function getSelectedType() {
+      return document.querySelector('input[name="img-type"]:checked').value;
+    }
+
+    function isThumbnail() {
+      return getSelectedType() === 'thumbnail';
+    }
+
+    function onTypeChange() {
+      const thumb = isThumbnail();
+      document.getElementById('type-hint').textContent = thumb
+        ? '商品一覧カードに表示される代表画像（1枚のみ・上書き）'
+        : '商品詳細モーダルに表示される画像（複数可・追記）';
+      document.getElementById('file-hint').textContent = thumb
+        ? 'JPG・PNG・WebP 対応 ／ 1枚のみ'
+        : 'JPG・PNG・WebP 対応 ／ 複数選択可';
+      document.getElementById('file-input').multiple = !thumb;
+      // サムネイルは1枚制限
+      if (thumb && selectedFiles.length > 1) {
+        selectedFiles = [selectedFiles[0]];
+        renderPreviews();
+      }
+    }
+
+    // ファイル選択時
+    function onFilesSelected(files) {
+      const thumb = isThumbnail();
+      if (thumb) {
+        // サムネイルは1枚のみ（最後に選んだ1枚で上書き）
+        selectedFiles = files.length > 0 ? [files[0]] : [];
+      } else {
+        Array.from(files).forEach(file => {
+          if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+            selectedFiles.push(file);
+          }
+        });
+      }
+      renderPreviews();
+    }
+
+    function renderPreviews() {
+      const preview = document.getElementById('preview');
+      preview.innerHTML = '';
+      selectedFiles.forEach((file, i) => {
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove';
+        removeBtn.textContent = '×';
+        removeBtn.onclick = function(e) {
+          e.stopPropagation();
+          selectedFiles.splice(i, 1);
+          renderPreviews();
+        };
+        item.appendChild(img);
+        item.appendChild(removeBtn);
+        preview.appendChild(item);
+      });
+      document.getElementById('upload-btn').disabled = selectedFiles.length === 0 || !rowInfo;
+    }
+
+    // ドラッグ&ドロップ対応
+    const dropArea = document.getElementById('drop-area');
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.borderColor = '#FF9800'; });
+    dropArea.addEventListener('dragleave', () => { dropArea.style.borderColor = '#ccc'; });
+    dropArea.addEventListener('drop', e => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+      onFilesSelected(e.dataTransfer.files);
+    });
+
+    // アップロード実行
+    function uploadAll() {
+      if (selectedFiles.length === 0 || !rowInfo) return;
+      const thumb = isThumbnail();
+      const targetCol = thumb ? rowInfo.thumbnailCol : rowInfo.detailCol;
+      if (!targetCol) {
+        setStatus('<span class="error-msg">対象の列がスプレッドシートに存在しません。</span>');
+        return;
+      }
+      const filesToUpload = thumb ? [selectedFiles[0]] : selectedFiles;
+      document.getElementById('upload-btn').disabled = true;
+      document.getElementById('progress-wrap').style.display = 'block';
+      setStatus('アップロード中... (0 / ' + filesToUpload.length + ')');
+      uploadNext(0, [], filesToUpload, targetCol, thumb ? 'replace' : 'append');
+    }
+
+    function uploadNext(index, uploadedUrls, filesToUpload, targetCol, mode) {
+      if (index >= filesToUpload.length) {
+        setStatus('セルに挿入中...');
+        google.script.run
+          .withSuccessHandler(function() {
+            setProgress(100);
+            const label = mode === 'replace' ? 'サムネイル画像' : '詳細画像';
+            setStatus('<span class="success">✅ ' + uploadedUrls.length + '枚アップロード完了！' + label + 'のURLをセルに挿入しました。</span>');
+            setTimeout(google.script.host.close, 2000);
+          })
+          .withFailureHandler(function(err) {
+            setStatus('<span class="error-msg">セル挿入エラー: ' + err.message + '</span>');
+            document.getElementById('upload-btn').disabled = false;
+          })
+          .insertImageUrls(rowInfo.row, targetCol, uploadedUrls, mode);
+        return;
+      }
+
+      const file = filesToUpload[index];
+      const progress = Math.round((index / filesToUpload.length) * 100);
+      setProgress(progress);
+      setStatus('アップロード中... (' + (index + 1) + ' / ' + filesToUpload.length + ') ' + file.name);
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64 = e.target.result.split(',')[1];
+        google.script.run
+          .withSuccessHandler(function(url) {
+            uploadedUrls.push(url);
+            uploadNext(index + 1, uploadedUrls, filesToUpload, targetCol, mode);
+          })
+          .withFailureHandler(function(err) {
+            setStatus('<span class="error-msg">アップロードエラー: ' + err.message + '</span>');
+            document.getElementById('upload-btn').disabled = false;
+          })
+          .uploadImageToDrive(base64, file.name, file.type);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setStatus(html) {
+      document.getElementById('status').innerHTML = html;
+    }
+    function setProgress(pct) {
+      document.getElementById('progress-bar').style.width = pct + '%';
+    }
+  </script>
+</body>
+</html>
