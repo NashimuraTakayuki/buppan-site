@@ -65,7 +65,7 @@ function doPost(e) {
 function getLineUserIdFromCode(code) {
   const CHANNEL_ID     = '2009555332';
   const CHANNEL_SECRET = 'e33b101940df1867d28259321e2f4b8b';
-  const REDIRECT_URI   = 'https://venerable-sawine-2fec62.netlify.app/';
+  const REDIRECT_URI   = 'https://playful-dasik-759d42.netlify.app/';
 
   // アクセストークン取得
   const tokenRes = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/token', {
