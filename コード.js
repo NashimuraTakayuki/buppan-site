@@ -375,7 +375,8 @@ function submitOrder(payload) {
 // ----------------------------------------------------
 // 【管理者用】SKU自動展開 ＆ シート保護機能
 // ----------------------------------------------------
-function generateSKUs() {
+function generateSKUs(isAuto) {
+  const isAutoRun = isAuto === true;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const productSheet = ss.getSheetByName('商品一覧');
   let inventorySheet = ss.getSheetByName('商品在庫');
@@ -431,23 +432,33 @@ function generateSKUs() {
 
   if (newRows.length > 0) {
     inventorySheet.getRange(inventorySheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
-    SpreadsheetApp.getUi().alert(`${newRows.length}件の新しいSKUを追加しました。\n在庫数を入力してください。`);
+    if (!isAutoRun) {
+      SpreadsheetApp.getUi().alert(`${newRows.length}件の新しいSKUを追加しました。\n在庫数を入力してください。`);
+    } else {
+      SpreadsheetApp.getActiveSpreadsheet().toast(`${newRows.length}件の新しいSKUを追加しました。在庫数を入力してください。`, 'SKU自動展開');
+    }
   } else {
-    SpreadsheetApp.getUi().alert('新しい組み合わせはありませんでした。最新の状態です。');
+    if (!isAutoRun) {
+      SpreadsheetApp.getUi().alert('新しい組み合わせはありませんでした。最新の状態です。');
+    }
   }
 
   // --- 【追加】在庫シートの保護（誤操作防止） ---
-  // シート全体を保護し、編集時に警告を出すように設定
-  let protection = inventorySheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)[0];
-  if (!protection) {
-    protection = inventorySheet.protect().setDescription('在庫シートの誤操作防止');
-  }
-  // 「在庫数」列（E列）のみ保護から除外（警告なしで編集可能）
-  const unprotected = inventorySheet.getRange('E:E');
-  protection.setUnprotectedRanges([unprotected]);
+  try {
+    // シート全体を保護し、編集時に警告を出すように設定
+    let protection = inventorySheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)[0];
+    if (!protection) {
+      protection = inventorySheet.protect().setDescription('在庫シートの誤操作防止');
+    }
+    // 「在庫数」列（E列）のみ保護から除外（警告なしで編集可能）
+    const unprotected = inventorySheet.getRange('E:E');
+    protection.setUnprotectedRanges([unprotected]);
 
-  // オーナー（管理者）でも警告を出す設定（Warning Only）
-  protection.setWarningOnly(true);
+    // オーナー（管理者）でも警告を出す設定（Warning Only）
+    protection.setWarningOnly(true);
+  } catch (err) {
+    console.warn('[generateSKUs] 保護設定エラー: ' + err.message);
+  }
 }
 
 // ----------------------------------------------------
@@ -550,11 +561,23 @@ function sendLineNotification(userId, message) {
 }
 
 // ----------------------------------------------------
-// 在庫数の手動編集を検知して変更履歴を記録（シンプルトリガー）
+// 在庫数の手動編集を検知して変更履歴を記録、およびSKU自動展開（シンプルトリガー）
 // ----------------------------------------------------
 function onEdit(e) {
+  if (!e || !e.range) return;
   const sheet = e.range.getSheet();
-  if (sheet.getName() !== '商品在庫') return;
+  const sheetName = sheet.getName();
+
+  // 商品一覧シートが編集された場合はSKUを自動展開
+  if (sheetName === '商品一覧') {
+    if (e.range.getRow() > 1) { // ヘッダー行以外の編集なら
+      generateSKUs(true);
+    }
+    return;
+  }
+
+  // 以降は「商品在庫」シートの編集検知
+  if (sheetName !== '商品在庫') return;
   if (e.range.getRow() === 1) return; // ヘッダー行は無視
 
   // 編集されたのが「在庫数」列かどうか確認

@@ -503,19 +503,25 @@ header {
 	user-select: none;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
+	gap: 6px;
 }
 
 .modal-desc-details summary::after {
-	content: "＞";
+	content: "";
 	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-right: 2.5px solid var(--primary-color);
+	border-bottom: 2.5px solid var(--primary-color);
+	transform: rotate(-45deg);
 	transition: transform 0.3s ease;
-	font-weight: bold;
-	font-size: 1.1rem;
+	margin-bottom: 2px;
 }
 
 .modal-desc-details[open] summary::after {
-	transform: rotate(90deg);
+	transform: rotate(45deg);
+	margin-bottom: 4px;
 }
 
 .modal-desc-details summary::-webkit-details-marker {
