@@ -15,6 +15,9 @@ function doGet(e) {
       case 'getCustomerInfoByLineId':
         result = getCustomerInfoByLineId(e.parameter.lineUserId);
         break;
+      case 'getMemberDiscountRate':
+        result = getMemberDiscountRate();
+        break;
       default:
         result = { error: 'Unknown action: ' + action };
     }
@@ -244,17 +247,41 @@ function submitOrder(payload) {
     Logger.log('[submitOrder] 在庫引き当て完了');
 
     // 4. 購入履歴への一括書き込み
+    // 会員特典割引の計算（LINE連携済みの場合のみ）
+    let discountRate = 0;
+    if (payload.lineUserId) {
+      discountRate = getMemberDiscountRate().discountRate;
+    }
+    const subtotalAmount = payload.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const discountAmount = discountRate > 0 ? Math.round(subtotalAmount * (discountRate / 100)) : 0;
+    const finalTotalAmount = subtotalAmount - discountAmount;
+
     const rowsToAppend = payload.cart.map(item => [
       orderId, timestamp, payload.customerInfo.email, payload.customerInfo.school,
       payload.customerInfo.memberName, item.sku, item.quantity, item.price * item.quantity, '未入金',
       payload.lineUserId || ''
     ]);
+
+    if (discountAmount > 0) {
+      rowsToAppend.push([
+        orderId, timestamp, payload.customerInfo.email, payload.customerInfo.school,
+        payload.customerInfo.memberName, '会員特典割引', 1, -discountAmount, '未入金',
+        payload.lineUserId || ''
+      ]);
+    }
+
     historySheet.getRange(historySheet.getLastRow() + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
     Logger.log('[submitOrder] 購入履歴書き込み完了 - 注文ID: ' + orderId);
 
+    // 金額表記用の文字列作成 (割引の有無で分岐)
+    let amountText = `【小計金額】 ¥${subtotalAmount.toLocaleString()}\n`;
+    if (discountAmount > 0) {
+      amountText += `【会員特典割引】 -¥${discountAmount.toLocaleString()} (${discountRate}%OFF)\n`;
+    }
+    amountText += `【合計金額】 ¥${finalTotalAmount.toLocaleString()}（税込）\n`;
+
     // 5. 購入者への確認メール送信
     try {
-      const totalAmount = payload.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const itemLines = payload.cart.map(item =>
         `・${item.productName}（${item.variation}）× ${item.quantity}個　¥${(item.price * item.quantity).toLocaleString()}`
       ).join('\n');
@@ -267,7 +294,7 @@ function submitOrder(payload) {
         + `【参加スクール】 ${payload.customerInfo.school}\n`
         + `━━━━━━━━━━━━━━━━━━\n\n`
         + `【ご注文商品】\n${itemLines}\n\n`
-        + `【合計金額】 ¥${totalAmount.toLocaleString()}（税込）\n\n`
+        + amountText + `\n`
         + `━━━━━━━━━━━━━━━━━━\n`
         + `※お支払いは月謝と合わせてご案内いたします。\n\n`
         + `アスリッシュ陸上スクール 物販システム`;
@@ -282,8 +309,7 @@ function submitOrder(payload) {
       Logger.log('[submitOrder] メール送信エラー（注文は完了）: ' + mailError.message);
     }
 
-    const totalAmount = payload.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemLines = payload.cart.map(item =>
+    const itemLinesSimple = payload.cart.map(item =>
       `・${item.productName}（${item.variation}）×${item.quantity}個`
     ).join('\n');
 
@@ -296,8 +322,8 @@ function submitOrder(payload) {
         + `【氏名】 ${payload.customerInfo.memberName}\n`
         + `【スクール】 ${payload.customerInfo.school}\n`
         + `【メール】 ${payload.customerInfo.email}\n\n`
-        + `【注文商品】\n${itemLines}\n\n`
-        + `【合計金額】 ¥${totalAmount.toLocaleString()}（税込）`;
+        + `【注文商品】\n${itemLinesSimple}\n\n`
+        + amountText;
       sendLineNotification(ADMIN_USER_ID, adminMessage);
       Logger.log('[submitOrder] 管理者LINE通知送信完了');
     } catch (lineError) {
@@ -312,8 +338,8 @@ function submitOrder(payload) {
           + `以下の内容で受け付けました。\n\n`
           + `【注文ID】 ${orderId}\n`
           + `【注文日時】 ${Utilities.formatDate(timestamp, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm')}\n\n`
-          + `【ご注文商品】\n${itemLines}\n\n`
-          + `【合計金額】 ¥${totalAmount.toLocaleString()}（税込）\n\n`
+          + `【ご注文商品】\n${itemLinesSimple}\n\n`
+          + amountText + `\n`
           + `お支払いは月謝と合わせてご案内します。\n`
           + `アスリッシュ陸上スクール`;
         sendLineNotification(payload.lineUserId, customerMessage);
@@ -422,6 +448,28 @@ function generateSKUs() {
 
   // オーナー（管理者）でも警告を出す設定（Warning Only）
   protection.setWarningOnly(true);
+}
+
+// ----------------------------------------------------
+// 会員特典情報シートから割引率を取得
+// 「会員特典情報」シートの B1 セルの値（数値）を返す
+// ----------------------------------------------------
+function getMemberDiscountRate() {
+  try {
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('会員特典情報');
+    if (!sheet) {
+      Logger.log('[getMemberDiscountRate] 会員特典情報シートが見つかりません');
+      return { discountRate: 0 };
+    }
+    const value = sheet.getRange('B1').getValue();
+    const rate  = parseFloat(String(value));
+    Logger.log('[getMemberDiscountRate] 割引率: ' + rate);
+    return { discountRate: isNaN(rate) ? 0 : rate };
+  } catch (e) {
+    Logger.log('[getMemberDiscountRate] エラー: ' + e.message);
+    return { discountRate: 0 };
+  }
 }
 
 // ----------------------------------------------------

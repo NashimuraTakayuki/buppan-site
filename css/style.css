@@ -3,7 +3,7 @@
    ============================================================ */
 :root {
 	--primary-color: #ff9800;
-	--line-color: #06c755;   /* LINE グリーン（会員価格表示に使用） */
+	--line-color: #06c755; /* LINE グリーン（会員価格表示に使用） */
 	--bg-color: #f3f4f6;
 	--text-color: #333;
 	--danger: #dc2626;
@@ -39,8 +39,12 @@ body {
 	margin-bottom: 16px;
 }
 @keyframes spin {
-	0%   { transform: rotate(0deg); }
-	100% { transform: rotate(360deg); }
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
 }
 
 /* ============================================================
@@ -62,9 +66,15 @@ header {
    スケルトンローディング
    ============================================================ */
 @keyframes skeleton-loading {
-	0%   { background-color: #e5e7eb; }
-	50%  { background-color: #d1d5db; }
-	100% { background-color: #e5e7eb; }
+	0% {
+		background-color: #e5e7eb;
+	}
+	50% {
+		background-color: #d1d5db;
+	}
+	100% {
+		background-color: #e5e7eb;
+	}
 }
 .skeleton-card {
 	background: #fff;
@@ -87,7 +97,9 @@ header {
 	animation: skeleton-loading 1.5s infinite;
 	width: 80%;
 }
-.skeleton-text.price { width: 40%; }
+.skeleton-text.price {
+	width: 40%;
+}
 .skeleton-tabs {
 	display: flex;
 	gap: 12px;
@@ -117,7 +129,9 @@ header {
 	justify-content: center;
 	transition: 0.2s;
 }
-.cart-icon-btn:active { transform: scale(0.9); }
+.cart-icon-btn:active {
+	transform: scale(0.9);
+}
 .cart-badge {
 	position: absolute;
 	top: 2px;
@@ -162,7 +176,9 @@ header {
 	border-bottom: 2px solid #e5e7eb;
 	scrollbar-width: none;
 }
-.category-tabs::-webkit-scrollbar { display: none; }
+.category-tabs::-webkit-scrollbar {
+	display: none;
+}
 .tab-item {
 	padding: 8px 4px;
 	color: #9ca3af;
@@ -172,7 +188,9 @@ header {
 	position: relative;
 	transition: color 0.2s;
 }
-.tab-item.active { color: var(--primary-color); }
+.tab-item.active {
+	color: var(--primary-color);
+}
 .tab-item.active::after {
 	content: "";
 	position: absolute;
@@ -215,11 +233,17 @@ header {
 	transition: border-color 0.2s;
 }
 .form-group input:focus,
-.form-group select:focus { border-color: var(--primary-color); }
+.form-group select:focus {
+	border-color: var(--primary-color);
+}
 .form-group input.valid,
-.form-group select.valid { border-color: var(--success); }
+.form-group select.valid {
+	border-color: var(--success);
+}
 .form-group input.invalid,
-.form-group select.invalid { border-color: var(--danger); }
+.form-group select.invalid {
+	border-color: var(--danger);
+}
 
 /* ============================================================
    商品グリッド・カード
@@ -235,7 +259,9 @@ header {
 	padding: 12px;
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 	cursor: pointer;
-	transition: transform 0.15s, box-shadow 0.15s;
+	transition:
+		transform 0.15s,
+		box-shadow 0.15s;
 	display: flex;
 	flex-direction: column;
 	justify-content: space-between;
@@ -244,14 +270,17 @@ header {
 	transform: scale(0.97);
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
-.product-card.out-of-stock { opacity: 0.5; pointer-events: none; }
+.product-card.out-of-stock {
+	opacity: 0.5;
+	pointer-events: none;
+}
 .product-img {
 	width: 100%;
 	aspect-ratio: 1 / 1;
-	object-fit: cover;
+	object-fit: contain;
 	border-radius: 8px;
 	margin-bottom: 8px;
-	background-color: #f3f4f6;
+	background-color: #fff;
 }
 .product-title {
 	font-size: 0.9rem;
@@ -286,6 +315,15 @@ header {
 	color: var(--line-color);
 	font-weight: bold;
 }
+.price-timesale {
+	color: #dc2626;
+	font-weight: bold;
+}
+.price-timesale {
+	color: var(--danger);
+	font-weight: bold;
+}
+
 /* 割引タグ */
 .discount-tags {
 	display: flex;
@@ -304,6 +342,14 @@ header {
 	background: var(--line-color);
 	color: #fff;
 }
+.tag-timesale {
+	background: #dc2626;
+	color: #fff;
+}
+.tag-timesale {
+	background: var(--danger);
+	color: #fff;
+}
 
 /* ============================================================
    モーダル（商品詳細）
@@ -311,14 +357,18 @@ header {
 .modal-overlay {
 	display: none;
 	position: fixed;
-	top: 0; left: 0;
-	width: 100%; height: 100%;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
 	background: rgba(0, 0, 0, 0.5);
 	z-index: 200;
 	justify-content: center;
 	align-items: flex-end;
 }
-.modal-overlay.active { display: flex; }
+.modal-overlay.active {
+	display: flex;
+}
 .modal-content {
 	background: #fff;
 	border-radius: 20px 20px 0 0;
@@ -342,11 +392,16 @@ header {
 	gap: 8px;
 	margin-bottom: 16px;
 	overflow-x: auto;
+	overflow-y: hidden;
 	height: 200px;
+}
+
+/* 画像が1枚の時に中央寄せ */
+.modal-images.single {
+	justify-content: center;
 }
 .modal-img-item img {
 	height: 100%;
-	width: auto;
 	object-fit: contain;
 	border-radius: 10px;
 }
@@ -390,7 +445,9 @@ header {
 	justify-content: center;
 	transition: background 0.15s;
 }
-.qty-control button:active { background: #f3f4f6; }
+.qty-control button:active {
+	background: #f3f4f6;
+}
 .qty-control input {
 	width: 40px;
 	text-align: center;
@@ -419,7 +476,10 @@ header {
 	justify-content: center;
 	gap: 8px;
 }
-.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
 .back-btn {
 	width: 100%;
 	padding: 12px;
@@ -434,7 +494,7 @@ header {
 .btn-spinner {
 	width: 18px;
 	height: 18px;
-	border: 3px solid rgba(255,255,255,0.4);
+	border: 3px solid rgba(255, 255, 255, 0.4);
 	border-top-color: #fff;
 	border-radius: 50%;
 	animation: spin 0.8s linear infinite;
@@ -486,14 +546,18 @@ header {
 	border-bottom: 1px solid #f3f4f6;
 	padding: 12px 0;
 }
-.cart-item:last-of-type { border-bottom: none; }
+.cart-item:last-of-type {
+	border-bottom: none;
+}
 .cart-item-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: flex-start;
 	margin-bottom: 8px;
 }
-.cart-item-details { flex: 1; }
+.cart-item-details {
+	flex: 1;
+}
 .cart-item-remove {
 	font-size: 0.8rem;
 	color: var(--danger);
@@ -501,14 +565,28 @@ header {
 	text-decoration: underline;
 }
 .total-amount {
-	text-align: right;
-	font-size: 1.1rem;
-	font-weight: bold;
 	padding-top: 12px;
 	border-top: 2px solid #f3f4f6;
 	margin-top: 8px;
 }
-.total-amount span { color: var(--primary-color); }
+.cart-total-row {
+	display: flex;
+	justify-content: space-between;
+	padding: 4px 0;
+	font-size: 1rem;
+}
+.cart-total-row.member-discount span {
+	color: var(--line-color);
+	font-weight: bold;
+}
+.cart-total-row.grand-total {
+	font-size: 1.25rem;
+	font-weight: bold;
+	margin-top: 4px;
+}
+.cart-total-row.grand-total span:last-child {
+	color: var(--primary-color);
+}
 .info-display div {
 	padding: 4px 0;
 	font-size: 0.9rem;
@@ -526,14 +604,18 @@ header {
 .confirm-overlay {
 	display: none;
 	position: fixed;
-	top: 0; left: 0;
-	width: 100%; height: 100%;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
 	background: rgba(0, 0, 0, 0.45);
 	z-index: 300;
 	justify-content: center;
 	align-items: center;
 }
-.confirm-overlay.active { display: flex; }
+.confirm-overlay.active {
+	display: flex;
+}
 .confirm-box {
 	background: #fff;
 	border-radius: 16px;
