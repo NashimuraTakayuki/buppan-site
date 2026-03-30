@@ -11,7 +11,7 @@ const GAS_URL =
 const LINE_CHANNEL_ID = "2009555332";
 
 /** LINE Login コールバックURL（Netlifyのデプロイ先に合わせる） */
-const REDIRECT_URI = "https://venerable-sawine-2fec62.netlify.app/";
+const REDIRECT_URI = "https://playful-dasik-759d42.netlify.app/";
 
 /** LINE Login 認証URL（自動生成） */
 const LINE_AUTH_URL =
