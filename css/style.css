@@ -338,16 +338,16 @@ header {
 	color: #999;
 }
 .modal-images {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
+	display: flex;
 	gap: 8px;
 	margin-bottom: 16px;
+	overflow-x: auto;
+	height: 200px;
 }
-.modal-images.single { grid-template-columns: 1fr; }
 .modal-img-item img {
-	width: 100%;
-	aspect-ratio: 1 / 1;
-	object-fit: cover;
+	height: 100%;
+	width: auto;
+	object-fit: contain;
 	border-radius: 10px;
 }
 .modal-img-placeholder {
