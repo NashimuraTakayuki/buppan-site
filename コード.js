@@ -66,19 +66,19 @@ function doPost(e) {
 // LINE Login OAuthコードをユーザーIDに交換
 // ----------------------------------------------------
 function getLineUserIdFromCode(code) {
-  const CHANNEL_ID     = '2009555332';
+  const CHANNEL_ID = '2009555332';
   const CHANNEL_SECRET = 'e33b101940df1867d28259321e2f4b8b';
-  const REDIRECT_URI   = 'https://playful-dasik-759d42.netlify.app/';
+  const REDIRECT_URI = 'https://playful-dasik-759d42.netlify.app/';
 
   // アクセストークン取得
   const tokenRes = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/token', {
     method: 'post',
     contentType: 'application/x-www-form-urlencoded',
     payload: 'grant_type=authorization_code'
-           + '&code='          + encodeURIComponent(code)
-           + '&redirect_uri='  + encodeURIComponent(REDIRECT_URI)
-           + '&client_id='     + CHANNEL_ID
-           + '&client_secret=' + CHANNEL_SECRET,
+      + '&code=' + encodeURIComponent(code)
+      + '&redirect_uri=' + encodeURIComponent(REDIRECT_URI)
+      + '&client_id=' + CHANNEL_ID
+      + '&client_secret=' + CHANNEL_SECRET,
     muteHttpExceptions: true
   });
   const tokenData = JSON.parse(tokenRes.getContentText());
@@ -467,14 +467,14 @@ function generateSKUs(isAuto) {
 // ----------------------------------------------------
 function getMemberDiscountRate() {
   try {
-    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('会員特典情報');
     if (!sheet) {
       Logger.log('[getMemberDiscountRate] 会員特典情報シートが見つかりません');
       return { discountRate: 0 };
     }
     const value = sheet.getRange('B1').getValue();
-    const rate  = parseFloat(String(value));
+    const rate = parseFloat(String(value));
     Logger.log('[getMemberDiscountRate] 割引率: ' + rate);
     return { discountRate: isNaN(rate) ? 0 : rate };
   } catch (e) {
@@ -496,9 +496,9 @@ function getCustomerInfoByLineId(lineUserId) {
     if (data.length <= 1) return null;
     const headers = data[0];
     const lineIdIdx = headers.indexOf('LINE UserID');
-    const emailIdx  = headers.indexOf('メールアドレス');
+    const emailIdx = headers.indexOf('メールアドレス');
     const schoolIdx = headers.indexOf('参加スクール');
-    const nameIdx   = headers.indexOf('会員氏名');
+    const nameIdx = headers.indexOf('会員氏名');
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][lineIdIdx]) === String(lineUserId)) {
         return { email: data[i][emailIdx], school: data[i][schoolIdx], memberName: data[i][nameIdx] };
@@ -600,10 +600,10 @@ function onEdit(e) {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🛍️ 物販システム管理')
-      .addItem('SKUを在庫シートに自動展開', 'generateSKUs')
-      .addSeparator()
-      .addItem('🖼️ 商品画像をアップロード', 'openUploadDialog')
-      .addToUi();
+    .addItem('SKUを在庫シートに自動展開', 'generateSKUs')
+    .addSeparator()
+    .addItem('🖼️ 商品画像をアップロード', 'openUploadDialog')
+    .addToUi();
 }
 
 // ----------------------------------------------------
