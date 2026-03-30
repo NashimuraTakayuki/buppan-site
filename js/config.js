@@ -4,8 +4,10 @@
 // ============================================================
 
 /** GAS（バックエンド）のエンドポイント */
+// const GAS_URL =
+//   "https://script.google.com/macros/s/AKfycbzi7X-uyxvxDIQyiwGeaYyyM_ks6aSvpmJs8uj3jcv8RcPf78cANXWH14L7h2SZY7RkZg/exec";
 const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbzi7X-uyxvxDIQyiwGeaYyyM_ks6aSvpmJs8uj3jcv8RcPf78cANXWH14L7h2SZY7RkZg/exec";
+  "https://script.google.com/macros/s/AKfycbyXhEvXp66p_vtQcwjZLt0FFF3KahllRWdN3u-GpICDqO4etgxqMhdmDPsu4fh_ynHPHg/exec";
 
 /** LINE Login チャネルID */
 const LINE_CHANNEL_ID = "2009555332";
