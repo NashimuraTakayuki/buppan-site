@@ -3,12 +3,14 @@
    ============================================================ */
 :root {
 	--primary-color: #ff9800;
-	--line-color: #06c755; /* LINE グリーン（会員価格表示に使用） */
+	--line-color: #06c755;
+	/* LINE グリーン（会員価格表示に使用） */
 	--bg-color: #f3f4f6;
 	--text-color: #333;
 	--danger: #dc2626;
 	--success: #10b981;
 }
+
 body {
 	font-family: "Helvetica Neue", Arial, sans-serif;
 	background-color: var(--bg-color);
@@ -29,6 +31,7 @@ body {
 	margin-top: 60px;
 	color: #666;
 }
+
 .spinner {
 	width: 40px;
 	height: 40px;
@@ -38,10 +41,12 @@ body {
 	animation: spin 1s linear infinite;
 	margin-bottom: 16px;
 }
+
 @keyframes spin {
 	0% {
 		transform: rotate(0deg);
 	}
+
 	100% {
 		transform: rotate(360deg);
 	}
@@ -69,13 +74,16 @@ header {
 	0% {
 		background-color: #e5e7eb;
 	}
+
 	50% {
 		background-color: #d1d5db;
 	}
+
 	100% {
 		background-color: #e5e7eb;
 	}
 }
+
 .skeleton-card {
 	background: #fff;
 	border-radius: 12px;
@@ -85,21 +93,25 @@ header {
 	flex-direction: column;
 	gap: 8px;
 }
+
 .skeleton-img {
 	width: 100%;
 	height: 150px;
 	border-radius: 8px;
 	animation: skeleton-loading 1.5s infinite;
 }
+
 .skeleton-text {
 	height: 16px;
 	border-radius: 4px;
 	animation: skeleton-loading 1.5s infinite;
 	width: 80%;
 }
+
 .skeleton-text.price {
 	width: 40%;
 }
+
 .skeleton-tabs {
 	display: flex;
 	gap: 12px;
@@ -107,6 +119,7 @@ header {
 	border-bottom: 2px solid #e5e7eb;
 	margin-bottom: 16px;
 }
+
 .skeleton-tab {
 	height: 24px;
 	width: 60px;
@@ -129,9 +142,11 @@ header {
 	justify-content: center;
 	transition: 0.2s;
 }
+
 .cart-icon-btn:active {
 	transform: scale(0.9);
 }
+
 .cart-badge {
 	position: absolute;
 	top: 2px;
@@ -176,9 +191,11 @@ header {
 	border-bottom: 2px solid #e5e7eb;
 	scrollbar-width: none;
 }
+
 .category-tabs::-webkit-scrollbar {
 	display: none;
 }
+
 .tab-item {
 	padding: 8px 4px;
 	color: #9ca3af;
@@ -188,9 +205,11 @@ header {
 	position: relative;
 	transition: color 0.2s;
 }
+
 .tab-item.active {
 	color: var(--primary-color);
 }
+
 .tab-item.active::after {
 	content: "";
 	position: absolute;
@@ -212,17 +231,20 @@ header {
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 	margin-bottom: 20px;
 }
+
 .form-group {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	margin-bottom: 16px;
 }
+
 .form-group label {
 	font-weight: bold;
 	font-size: 0.9rem;
 	color: #555;
 }
+
 .form-group input,
 .form-group select {
 	padding: 10px 12px;
@@ -232,14 +254,17 @@ header {
 	outline: none;
 	transition: border-color 0.2s;
 }
+
 .form-group input:focus,
 .form-group select:focus {
 	border-color: var(--primary-color);
 }
+
 .form-group input.valid,
 .form-group select.valid {
 	border-color: var(--success);
 }
+
 .form-group input.invalid,
 .form-group select.invalid {
 	border-color: var(--danger);
@@ -253,6 +278,7 @@ header {
 	grid-template-columns: repeat(2, 1fr);
 	gap: 16px;
 }
+
 .product-card {
 	background: #fff;
 	border-radius: 12px;
@@ -266,14 +292,17 @@ header {
 	flex-direction: column;
 	justify-content: space-between;
 }
+
 .product-card:active {
 	transform: scale(0.97);
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
+
 .product-card.out-of-stock {
 	opacity: 0.5;
 	pointer-events: none;
 }
+
 .product-img {
 	width: 100%;
 	aspect-ratio: 1 / 1;
@@ -282,12 +311,14 @@ header {
 	margin-bottom: 8px;
 	background-color: #fff;
 }
+
 .product-title {
 	font-size: 0.9rem;
 	font-weight: bold;
 	color: #333;
 	margin-bottom: 4px;
 }
+
 .product-price {
 	font-size: 1rem;
 	font-weight: bold;
@@ -303,6 +334,7 @@ header {
 	flex-direction: column;
 	gap: 1px;
 }
+
 /* 定価（打ち消し線） */
 .price-original {
 	text-decoration: line-through;
@@ -310,15 +342,18 @@ header {
 	font-size: 0.8rem;
 	font-weight: normal;
 }
+
 /* 会員価格（LINE グリーン） */
 .price-member {
 	color: var(--line-color);
 	font-weight: bold;
 }
+
 .price-timesale {
 	color: #dc2626;
 	font-weight: bold;
 }
+
 .price-timesale {
 	color: var(--danger);
 	font-weight: bold;
@@ -331,6 +366,7 @@ header {
 	flex-wrap: wrap;
 	margin-top: 2px;
 }
+
 .discount-tag {
 	font-size: 0.68rem;
 	padding: 2px 6px;
@@ -338,14 +374,17 @@ header {
 	font-weight: bold;
 	line-height: 1.4;
 }
+
 .tag-member {
 	background: var(--line-color);
 	color: #fff;
 }
+
 .tag-timesale {
 	background: #dc2626;
 	color: #fff;
 }
+
 .tag-timesale {
 	background: var(--danger);
 	color: #fff;
@@ -366,9 +405,11 @@ header {
 	justify-content: center;
 	align-items: flex-end;
 }
+
 .modal-overlay.active {
 	display: flex;
 }
+
 .modal-content {
 	background: #fff;
 	border-radius: 20px 20px 0 0;
@@ -379,14 +420,42 @@ header {
 	overflow-y: auto;
 	position: relative;
 }
-.close-btn {
-	position: absolute;
-	top: 16px;
-	right: 20px;
-	font-size: 1.5rem;
-	cursor: pointer;
-	color: #999;
+
+.modal-header-sticky {
+	position: sticky;
+	top: 0;
+	display: flex;
+	justify-content: flex-end;
+	z-index: 10;
+	margin-right: -10px;
+	margin-top: -10px;
+	margin-bottom: -30px;
+	/* pull content up */
+	pointer-events: none;
+	/* Let clicks pass through empty space */
 }
+
+.close-btn {
+	pointer-events: auto;
+	/* Re-enable clicks on button */
+	font-size: 1.8rem;
+	cursor: pointer;
+	color: #666;
+	background: rgba(255, 255, 255, 0.9);
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	display: flex;
+	justify-content: center;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	line-height: 1;
+	transition: background 0.2s;
+}
+
+.close-btn:active {
+	background: #f3f4f6;
+}
+
 .modal-images {
 	display: flex;
 	gap: 8px;
@@ -400,11 +469,13 @@ header {
 .modal-images.single {
 	justify-content: center;
 }
+
 .modal-img-item img {
 	height: 100%;
 	object-fit: contain;
 	border-radius: 10px;
 }
+
 .modal-img-placeholder {
 	width: 100%;
 	aspect-ratio: 1 / 1;
@@ -416,12 +487,63 @@ header {
 	color: #999;
 	font-size: 0.8rem;
 }
+
+.modal-desc-details {
+	margin-bottom: 16px;
+}
+
+.modal-desc-details summary {
+	font-weight: bold;
+	color: var(--primary-color);
+	cursor: pointer;
+	padding: 8px 0;
+	list-style: none;
+	/* hide default arrow */
+	outline: none;
+	user-select: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.modal-desc-details summary::after {
+	content: "＞";
+	display: inline-block;
+	transition: transform 0.3s ease;
+	font-weight: bold;
+	font-size: 1.1rem;
+}
+
+.modal-desc-details[open] summary::after {
+	transform: rotate(90deg);
+}
+
+.modal-desc-details summary::-webkit-details-marker {
+	display: none;
+	/* Safari */
+}
+
 .modal-desc {
 	font-size: 0.9rem;
 	color: #555;
 	line-height: 1.6;
-	margin-bottom: 16px;
+	padding-top: 8px;
 	white-space: pre-wrap;
+	border-top: 1px dotted #ccc;
+}
+
+/* ============================================================
+   フォームグループ追加拡張（サイズ・カラー等）
+   ============================================================ */
+.select-group {
+	display: flex;
+	gap: 8px;
+	width: 100%;
+}
+
+.select-group select {
+	flex: 1;
+	min-width: 0;
 }
 
 /* ============================================================
@@ -432,6 +554,7 @@ header {
 	align-items: center;
 	gap: 8px;
 }
+
 .qty-control button {
 	width: 32px;
 	height: 32px;
@@ -445,9 +568,11 @@ header {
 	justify-content: center;
 	transition: background 0.15s;
 }
+
 .qty-control button:active {
 	background: #f3f4f6;
 }
+
 .qty-control input {
 	width: 40px;
 	text-align: center;
@@ -476,10 +601,12 @@ header {
 	justify-content: center;
 	gap: 8px;
 }
+
 .primary-btn:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+
 .back-btn {
 	width: 100%;
 	padding: 12px;
@@ -491,6 +618,7 @@ header {
 	cursor: pointer;
 	margin-top: 8px;
 }
+
 .btn-spinner {
 	width: 18px;
 	height: 18px;
@@ -515,6 +643,7 @@ header {
 	z-index: 150;
 	display: none;
 }
+
 .floating-bar-content {
 	max-width: 600px;
 	margin: 0 auto;
@@ -523,11 +652,13 @@ header {
 	justify-content: space-between;
 	gap: 12px;
 }
+
 .floating-total {
 	font-size: 0.9rem;
 	color: #555;
 	line-height: 1.4;
 }
+
 .floating-btn {
 	padding: 10px 20px;
 	background: var(--primary-color);
@@ -546,52 +677,63 @@ header {
 	border-bottom: 1px solid #f3f4f6;
 	padding: 12px 0;
 }
+
 .cart-item:last-of-type {
 	border-bottom: none;
 }
+
 .cart-item-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: flex-start;
 	margin-bottom: 8px;
 }
+
 .cart-item-details {
 	flex: 1;
 }
+
 .cart-item-remove {
 	font-size: 0.8rem;
 	color: var(--danger);
 	cursor: pointer;
 	text-decoration: underline;
 }
+
 .total-amount {
 	padding-top: 12px;
 	border-top: 2px solid #f3f4f6;
 	margin-top: 8px;
 }
+
 .cart-total-row {
 	display: flex;
 	justify-content: space-between;
 	padding: 4px 0;
 	font-size: 1rem;
 }
+
 .cart-total-row.member-discount span {
 	color: var(--line-color);
 	font-weight: bold;
 }
+
 .cart-total-row.grand-total {
 	font-size: 1.25rem;
 	font-weight: bold;
 	margin-top: 4px;
 }
+
 .cart-total-row.grand-total span:last-child {
 	color: var(--primary-color);
 }
+
 .info-display div {
 	padding: 4px 0;
 	font-size: 0.9rem;
 	color: #555;
 }
+
 .info-display span {
 	font-weight: bold;
 	color: #333;
@@ -613,9 +755,11 @@ header {
 	justify-content: center;
 	align-items: center;
 }
+
 .confirm-overlay.active {
 	display: flex;
 }
+
 .confirm-box {
 	background: #fff;
 	border-radius: 16px;
@@ -624,11 +768,13 @@ header {
 	max-width: 340px;
 	text-align: center;
 }
+
 .confirm-btn-wrap {
 	display: flex;
 	gap: 12px;
 	margin-top: 20px;
 }
+
 .confirm-btn {
 	flex: 1;
 	padding: 12px;
@@ -638,10 +784,12 @@ header {
 	cursor: pointer;
 	border: none;
 }
+
 .confirm-cancel {
 	background: #f3f4f6;
 	color: #555;
 }
+
 .confirm-ok {
 	background: var(--primary-color);
 	color: #fff;

@@ -180,8 +180,13 @@ function renderCategoryTabs() {
 	tabContainer.innerHTML = "";
 	const categories = ["すべて"];
 	globalProducts.forEach((p) => {
-		const cat = p["カテゴリ"];
-		if (cat && !categories.includes(cat)) categories.push(cat);
+		const catString = p["カテゴリ"];
+		if (catString) {
+			const cats = String(catString).split(",").map(c => c.trim()).filter(c => c !== "");
+			cats.forEach(cat => {
+				if (!categories.includes(cat)) categories.push(cat);
+			});
+		}
 	});
 	categories.forEach((cat) => {
 		const tab = document.createElement("div");
@@ -206,7 +211,11 @@ function renderProductGrid(category) {
 	const filteredProducts =
 		category === "すべて"
 			? globalProducts
-			: globalProducts.filter((p) => p["カテゴリ"] === category);
+			: globalProducts.filter((p) => {
+					const catString = p["カテゴリ"] || "";
+					const cats = String(catString).split(",").map(c => c.trim());
+					return cats.includes(category);
+			  });
 
 	if (filteredProducts.length === 0) {
 		app.innerHTML =
@@ -401,21 +410,23 @@ function openModal(productId) {
 	document.getElementById("modal-price").innerHTML = buildPriceHTML(p);
 	document.getElementById("modal-desc").innerText = p["商品説明"] || "";
 
-	// SKU（サイズ/カラー）選択肢
-	const skuSelect = document.getElementById("modal-sku");
-	skuSelect.innerHTML = "";
+	// SKU（サイズ/カラー）選択肢の初期化（分割版）
+	const sizes = [];
 	p.stockList.forEach((stock) => {
-		const stockNum = Number(stock["在庫数"]) || 0;
-		const option = document.createElement("option");
-		option.value = stock["SKU"];
-		option.dataset.stock = stockNum;
-		option.text =
-			stockNum > 0
-				? `サイズ: ${stock["サイズ"]} / カラー: ${stock["カラー"]} (残り ${stockNum})`
-				: `サイズ: ${stock["サイズ"]} / カラー: ${stock["カラー"]} (在庫切れ)`;
-		if (stockNum <= 0) option.disabled = true;
-		skuSelect.appendChild(option);
+		if (!sizes.includes(stock["サイズ"])) sizes.push(stock["サイズ"]);
 	});
+
+	const sizeSelect = document.getElementById("modal-size");
+	sizeSelect.innerHTML = "";
+	sizes.forEach((size) => {
+		const option = document.createElement("option");
+		option.value = size;
+		option.text = size;
+		sizeSelect.appendChild(option);
+	});
+
+	// サイズに合わせてカラーを初期生成し、数量更新
+	onSizeChange();
 
 	document.getElementById("modal-qty").value = 1;
 	updateMaxQuantity();
@@ -429,9 +440,35 @@ function closeModal() {
 	currentSelectedProduct = null;
 }
 
+function onSizeChange() {
+	if (!currentSelectedProduct) return;
+	const size = document.getElementById("modal-size").value;
+	const colorSelect = document.getElementById("modal-color");
+	colorSelect.innerHTML = "";
+
+	const availableStocks = currentSelectedProduct.stockList.filter((stock) => stock["サイズ"] === size);
+
+	availableStocks.forEach((stock) => {
+		const stockNum = Number(stock["在庫数"]) || 0;
+		const option = document.createElement("option");
+		option.value = stock["カラー"];
+		option.dataset.stock = stockNum;
+		option.dataset.sku = stock["SKU"];
+		option.text =
+			stockNum > 0
+				? `${stock["カラー"]} (残り ${stockNum})`
+				: `${stock["カラー"]} (在庫切れ)`;
+		if (stockNum <= 0) option.disabled = true;
+		colorSelect.appendChild(option);
+	});
+
+	// カラーが切り替わったので最大数量も再計算
+	updateMaxQuantity();
+}
+
 function updateMaxQuantity() {
-	const skuSelect = document.getElementById("modal-sku");
-	const selectedOption = skuSelect.options[skuSelect.selectedIndex];
+	const colorSelect = document.getElementById("modal-color");
+	const selectedOption = colorSelect.options[colorSelect.selectedIndex];
 	const maxStock = selectedOption ? Number(selectedOption.dataset.stock) : 0;
 	const qtyInput = document.getElementById("modal-qty");
 	const addBtn = document.getElementById("modal-add-btn");
@@ -460,11 +497,15 @@ function changeModalQty(delta) {
 
 /** 商品をカートに追加 */
 function addToCart() {
-	const skuSelect = document.getElementById("modal-sku");
-	const selectedOption = skuSelect.options[skuSelect.selectedIndex];
-	const sku = skuSelect.value;
+	const sizeSelect = document.getElementById("modal-size");
+	const colorSelect = document.getElementById("modal-color");
+	const selectedColorOption = colorSelect.options[colorSelect.selectedIndex];
+
+	if (!selectedColorOption) return; // 万が一のためのフェールセーフ
+
+	const sku = selectedColorOption.dataset.sku;
 	const qty = Number(document.getElementById("modal-qty").value);
-	const maxStock = Number(selectedOption.dataset.stock);
+	const maxStock = Number(selectedColorOption.dataset.stock);
 
 	if (qty > maxStock) {
 		alert("在庫数を超えてカートに入れることはできません。");
@@ -488,7 +529,7 @@ function addToCart() {
 		cart.push({
 			sku: sku,
 			productName: currentSelectedProduct["商品名"],
-			variation: selectedOption.text.split(" (")[0],
+			variation: `サイズ: ${sizeSelect.value} / カラー: ${colorSelect.value}`,
 			// カート内の計算基準となる価格（タイムセール適用後）
 			price: hasTimesale ? timesalePrice : normalPrice,
 			// 打ち消し線で表示するための元の通常価格
