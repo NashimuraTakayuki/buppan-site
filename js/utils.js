@@ -43,7 +43,7 @@ function buildPriceHTML(product) {
       <span class="price-original">¥${normalPrice.toLocaleString()}</span>
       <span class="price-timesale">¥${displayPrice.toLocaleString()}</span>
       <div class="discount-tags">
-        <span class="discount-tag tag-timesale">タイムセール</span>
+        <span class="discount-tag tag-timesale">会員割引</span>
       </div>
     </div>`;
 	} else {
