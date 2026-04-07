@@ -332,63 +332,91 @@ header {
 .price-display {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: 4px;
+	line-height: 1.2;
 }
 
-/* 定価（打ち消し線） */
-.price-original {
-	text-decoration: line-through;
+/* 打ち消し線（疑似要素で上から描画） */
+.price-strike {
+	position: relative;
+	display: inline-block;
 	color: #999;
-	font-size: 0.8rem;
+}
+
+.price-strike::after {
+	content: "";
+	position: absolute;
+	left: -2px;
+	right: -2px;
+	top: 50%;
+	/* 文字の垂直中央 */
+	height: 1.5px;
+	background-color: #888;
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+
+/* 通常価格（打ち消し） */
+.price-original {
+	font-size: 0.9rem;
 	font-weight: normal;
 }
 
-/* 会員価格（LINE グリーン） */
-.price-member {
-	color: var(--line-color);
+/* 会員価格（緑） */
+.price-member-text {
+	color: #00D241;
 	font-weight: bold;
+	font-size: 1.1rem;
+	margin-left: 4px;
 }
 
-.price-timesale {
-	color: #dc2626;
+/* タイムセール価格（赤） */
+.price-timesale-text {
+	color: #E52020;
 	font-weight: bold;
+	font-size: 1.3rem;
 }
 
-.price-timesale {
-	color: var(--danger);
-	font-weight: bold;
+/* タイムセールの打ち消し（赤） */
+.price-timesale-strike {
+	color: #E52020;
+	margin-left: 4px;
 }
 
-/* 割引タグ */
-.discount-tags {
+/* 割引なしの標準価格 */
+.price-base {
+	font-size: 1.2rem;
+	font-weight: bold;
+	color: var(--primary-color);
+}
+
+/* 割引バッジのコンテナ */
+.discount-badges {
 	display: flex;
-	gap: 4px;
-	flex-wrap: wrap;
-	margin-top: 2px;
+	gap: 6px;
+	margin-top: 4px;
 }
 
-.discount-tag {
-	font-size: 0.68rem;
-	padding: 2px 6px;
-	border-radius: 4px;
+/* バッジの共通スタイル */
+.badge {
+	font-size: 0.6rem;
+	padding: 4px 8px;
+	border-radius: 6px;
 	font-weight: bold;
-	line-height: 1.4;
+	color: #fff;
+	display: inline-block;
 }
 
-.tag-member {
-	background: var(--line-color);
-	color: #fff;
+/* タイムセールバッジ（赤） */
+.badge-timesale {
+	background-color: #E52020;
 }
 
-.tag-timesale {
-	background: #dc2626;
-	color: #fff;
+/* 会員割引バッジ（緑） */
+.badge-member {
+	background-color: #00D241;
 }
 
-.tag-timesale {
-	background: var(--danger);
-	color: #fff;
-}
 
 /* ============================================================
    モーダル（商品詳細）

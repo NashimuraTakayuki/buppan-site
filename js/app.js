@@ -88,8 +88,13 @@ window.onload = async function () {
 			fetchMemberDiscountRate()
 				.then((rate) => {
 					memberDiscountRate = rate;
+					if (lineUserId && statusEl) {
+						statusEl.textContent = "✓ LINEアカウント連携済み (会員特典: " + rate + "%OFF)";
+					}
 				})
-				.catch(() => { memberDiscountRate = 0; });
+				.catch(() => {
+					memberDiscountRate = 0;
+				});
 		})
 		.catch(() => {
 			document.getElementById("loading").innerText = "エラー: スクール情報の取得に失敗しました";
@@ -228,7 +233,9 @@ function renderProductGrid(category) {
 		if (p.stockList) p.stockList.forEach((s) => (totalStock += Number(s["在庫数"]) || 0));
 		const isOutOfStock = totalStock <= 0;
 
-		const imgSrc = normalizeDriveUrl(p["サムネイル画像"] ? String(p["サムネイル画像"]) : "");
+		const rawThumbnails = p["サムネイル画像"] ? String(p["サムネイル画像"]) : "";
+		const thumbUrls = rawThumbnails.split(/[\s,]+/).map(normalizeDriveUrl).filter(u => u.length > 0);
+		const imgSrc = thumbUrls[0] || "";
 		const imgHtml = imgSrc
 			? `<img src="${imgSrc}" class="product-img" alt="${p["商品名"]}" onerror="this.style.display='none'">`
 			: `<div class="product-img" style="display:flex; align-items:center; justify-content:center; color:#999; font-size:0.8rem;">No Image</div>`;
@@ -241,7 +248,7 @@ function renderProductGrid(category) {
         ${imgHtml}
         <div class="product-title">${p["商品名"]}</div>
       </div>
-      <div class="product-price">${isOutOfStock ? "在庫切れ" : buildPriceHTML(p)}</div>
+      <div class="product-price">${isOutOfStock ? "在庫切れ" : buildPriceHTML(p, memberDiscountRate, !!lineUserId)}</div>
     `;
 		app.appendChild(card);
 	});
@@ -313,6 +320,10 @@ function editUserInfo() {
 
 /** カート画面へ */
 function goToCart() {
+	if (!isProductLoaded) {
+		alert("商品データの読み込みが完了するまでお待ちください。");
+		return;
+	}
 	hideAllViews();
 	document.getElementById("cart-view").style.display = "block";
 	renderEditableCart();
@@ -387,9 +398,9 @@ function openModal(productId) {
 	// 画像ギャラリー
 	const imageGallery = document.getElementById("modal-images");
 	imageGallery.innerHTML = "";
-	const rawUrls = p["詳細画像"] ? String(p["詳細画像"]) : "";
-	const imgUrls = rawUrls
-		.split(",")
+	const rawDetailUrls = p["詳細画像"] ? String(p["詳細画像"]) : "";
+	const imgUrls = rawDetailUrls
+		.split(/[\s,]+/)
 		.map((u) => normalizeDriveUrl(u))
 		.filter((u) => u.length > 0);
 	if (imgUrls.length === 0) {
@@ -407,7 +418,7 @@ function openModal(productId) {
 	}
 
 	document.getElementById("modal-title").innerText = p["商品名"];
-	document.getElementById("modal-price").innerHTML = buildPriceHTML(p);
+	document.getElementById("modal-price").innerHTML = buildPriceHTML(p, memberDiscountRate, !!lineUserId);
 	document.getElementById("modal-desc").innerText = p["商品説明"] || "";
 
 	// SKU（サイズ/カラー）選択肢の初期化（分割版）
@@ -608,7 +619,7 @@ function updateCartUI() {
 
 	const isProductListVisible =
 		document.getElementById("product-list-view").style.display === "block";
-	if (count > 0 && isProductListVisible) {
+	if (isProductLoaded && count > 0 && isProductListVisible) {
 		document.getElementById("float-count").innerText = count;
 		document.getElementById("float-total").innerText = Math.round(total).toLocaleString();
 		bar.style.display = "block";

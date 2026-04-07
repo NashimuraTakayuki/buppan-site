@@ -15,41 +15,78 @@ function parsePrice(value) {
 }
 
 /**
- * 価格表示HTML生成
+ * 価格表示HTML生成 (画像デザイン対応版)
  *
- * 【タイムセール価格の表示条件】
- *   1. スプレッドシートに「タイムセール価格(円)」が設定されている
- *   2. タイムセール価格 < 通常価格（実際に値引きされている）
- *   上記をすべて満たす場合のみ：
- *   - 通常価格を打ち消し線（グレー）で表示
- *   - タイムセール価格を赤で表示
- *   - 「タイムセール」タグを付与
- *
- * それ以外はシンプルに通常価格のみ表示
- *
- * ※ 会員割引はカート合計に対して「会員特典情報」シートの割引率で一括適用する
+ * @param {Object} product 商品データ
+ * @param {number} memberRate 会員割引率 (0-100)
+ * @param {boolean} isLinked LINE連携済みかどうか
  */
-function buildPriceHTML(product) {
+function buildPriceHTML(product, memberRate = 0, isLinked = false) {
 	const normalPrice = parsePrice(product["通常価格(円)"]);
 	const timesalePrice = parsePrice(product["タイムセール価格(円)"]);
 
-	// タイムセール価格が存在し、通常価格より安い場合のみ適用
+	// タイムセール価格が有効か
 	const hasTimesale = timesalePrice > 0 && timesalePrice < normalPrice;
-	const displayPrice = hasTimesale ? timesalePrice : normalPrice;
 
-	// タイムセールの場合、通常価格に打ち消し線を入れて表示
-	if (hasTimesale) {
-		return `<div class="price-display">
-      <span class="price-original">¥${normalPrice.toLocaleString()}</span>
-      <span class="price-timesale">¥${displayPrice.toLocaleString()}</span>
-      <div class="discount-tags">
-        <span class="discount-tag tag-timesale">会員割引</span>
-      </div>
-    </div>`;
+	// 基準価格（会員割引のベース。タイムセール中ならその価格、そうでなければ通常価格）
+	const basePrice = hasTimesale ? timesalePrice : normalPrice;
+
+	// 会員価格の計算（LINE連携されている場合のみ有効）
+	// ルール: 会員価格 = 基準価格 * (1 - 割引率 / 100)
+	const hasMemberDiscount = isLinked && memberRate > 0;
+	const memberPrice = hasMemberDiscount ? Math.floor(basePrice * (1 - memberRate / 100)) : basePrice;
+
+	let html = '<div class="price-display">';
+
+	if (isLinked) {
+		// --- LINE連携済みユーザー向け表示 ---
+		if (hasTimesale) {
+			// 【画像2相当】タイムセール中
+			html += `
+        <div class="discount-badges" style="margin-bottom: 2px;">
+          <span class="badge badge-timesale">タイムセール</span>
+        </div>
+        <div class="price-row">
+          <span class="price-original price-strike">¥${normalPrice.toLocaleString()}</span>
+          <span class="price-timesale-strike price-strike">¥${timesalePrice.toLocaleString()}</span>
+        </div>
+        <div class="price-member-text">
+          ¥${memberPrice.toLocaleString()}
+        </div>
+      `;
+		} else if (hasMemberDiscount) {
+			// 【画像3相当】通常価格(打借し) + 会員価格(緑太字/横並び)
+			html += `
+        <div class="price-row">
+          <span class="price-original price-strike">¥${normalPrice.toLocaleString()}</span>
+          <span class="price-member-text">¥${memberPrice.toLocaleString()}</span>
+        </div>
+      `;
+		} else {
+			// 連携済みだが会員割引率が0の場合
+			html += `<div class="price-base">¥${normalPrice.toLocaleString()}</div>`;
+		}
 	} else {
-		// それ以外は価格のみ表示
-		return `¥${displayPrice.toLocaleString()}`;
+		// --- 未連携ユーザー向け表示 ---
+		if (hasTimesale) {
+			// 【画像1相当】通常価格(打越し) + タイムセール価格(赤太字) を横並び
+			html += `
+        <div class="discount-badges" style="margin-bottom: 2px;">
+          <span class="badge badge-timesale">タイムセール</span>
+        </div>
+        <div class="price-row">
+          <span class="price-original price-strike">¥${normalPrice.toLocaleString()}</span>
+          <span class="price-timesale-text">¥${timesalePrice.toLocaleString()}</span>
+        </div>
+      `;
+		} else {
+			// 割引なし
+			html += `<div class="price-base">¥${normalPrice.toLocaleString()}</div>`;
+		}
 	}
+
+	html += '</div>';
+	return html;
 }
 
 /**
@@ -59,10 +96,29 @@ function buildPriceHTML(product) {
 function normalizeDriveUrl(url) {
 	if (!url) return "";
 	url = url.trim();
-	const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-	if (fileMatch) return "https://lh3.googleusercontent.com/d/" + fileMatch[1];
-	const ucMatch = url.match(/drive\.google\.com\/uc\?(?:[^&]+&)*id=([a-zA-Z0-9_-]+)/);
-	if (ucMatch) return "https://lh3.googleusercontent.com/d/" + ucMatch[1];
+
+	// すでに https://lh3.googleusercontent.com/d/ 形式ならそのまま
+	if (url.startsWith("https://lh3.googleusercontent.com/d/")) return url;
+
+	let fileId = "";
+
+	// 1. /file/d/{ID}/ 形式
+	const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+	if (fileMatch) {
+		fileId = fileMatch[1];
+	} else {
+		// 2. ?id={ID} または &id={ID} 形式（uc?id=, open?id= など）
+		const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+		if (idMatch) {
+			fileId = idMatch[1];
+		}
+	}
+
+	if (fileId) {
+		return "https://lh3.googleusercontent.com/d/" + fileId;
+	}
+
+	// 形式に合致しない場合はそのまま返す
 	return url;
 }
 
