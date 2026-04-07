@@ -490,7 +490,8 @@ header {
 	margin-bottom: 16px;
 	overflow-x: auto;
 	overflow-y: hidden;
-	height: 200px;
+	height: 240px;
+	/* 少し高さを増やして余裕を持たせる */
 }
 
 /* 画像が1枚の時に中央寄せ */
@@ -498,22 +499,39 @@ header {
 	justify-content: center;
 }
 
+.modal-img-item {
+	height: 100%;
+	flex: 0 0 auto;
+	display: flex;
+	justify-content: center;
+}
+
 .modal-img-item img {
 	height: 100%;
+	max-width: 280px;
 	object-fit: contain;
 	border-radius: 10px;
 }
 
 .modal-img-placeholder {
 	width: 100%;
-	aspect-ratio: 1 / 1;
+	height: 100%;
+	min-width: 200px;
 	background-color: #f3f4f6;
 	border-radius: 10px;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	color: #999;
-	font-size: 0.8rem;
+	font-size: 0.9rem;
+	gap: 8px;
+}
+
+.modal-img-placeholder::before {
+	content: "🖼️";
+	font-size: 2rem;
+	opacity: 0.5;
 }
 
 .modal-desc-details {

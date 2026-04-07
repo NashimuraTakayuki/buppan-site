@@ -80,6 +80,7 @@ window.onload = async function () {
 					// すでに商品一覧画面にいる場合は即描画
 					if (document.getElementById("product-list-view").style.display === "block") {
 						initData();
+						updateCartUI();
 					}
 				})
 				.catch((err) => console.error("商品取得エラー:", err));
@@ -336,7 +337,9 @@ function goToCart() {
     `;
 	}
 	window.scrollTo(0, 0);
-}
+	// --- 初期表示の更新 ---
+	updateCartUI();
+};
 
 /** 商品一覧に戻る */
 function backToShopping() {
@@ -398,11 +401,18 @@ function openModal(productId) {
 	// 画像ギャラリー
 	const imageGallery = document.getElementById("modal-images");
 	imageGallery.innerHTML = "";
-	const rawDetailUrls = p["詳細画像"] ? String(p["詳細画像"]) : "";
-	const imgUrls = rawDetailUrls
-		.split(/[\s,]+/)
+
+	// サムネイル画像と詳細画像を統合（サムネイルを優先的に1枚目にする）
+	const rawThumbnails = p["サムネイル画像"] ? String(p["サムネイル画像"]) : "";
+	const rawDetails = p["詳細画像"] ? String(p["詳細画像"]) : "";
+
+	const allUrls = [...rawThumbnails.split(/[\s,]+/), ...rawDetails.split(/[\s,]+/)]
 		.map((u) => normalizeDriveUrl(u))
 		.filter((u) => u.length > 0);
+
+	// 重複を省きつつ順序を維持
+	const imgUrls = [...new Set(allUrls)];
+
 	if (imgUrls.length === 0) {
 		imageGallery.classList.add("single");
 		imageGallery.innerHTML =
