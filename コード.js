@@ -198,19 +198,18 @@ function submitOrder(payload) {
 
   // 購入履歴シートの確認・作成
   let historySheet = ss.getSheetByName('購入履歴');
-  const historyHeaders = ['注文ID', 'タイムスタンプ', 'メールアドレス', '参加スクール', '会員氏名', 'SKU', '注文数', '通常価格小計', 'タイムセール割引額', '支払金額小計', 'ステータス', 'LINE UserID'];
-  
+  const historyHeaders = ['注文ID', 'タイムスタンプ', 'メールアドレス', '参加スクール', '会員氏名', 'SKU', '注文数', '支払金額小計', 'ステータス', 'LINE UserID'];
+
   if (!historySheet) {
     historySheet = ss.insertSheet('購入履歴');
     historySheet.appendRow(historyHeaders);
     Logger.log('[submitOrder] 購入履歴シートを新規作成');
   } else {
-    // 既存シートのヘッダーチェック（列が足りない、または古い形式の場合は更新）
+    // 既存シートのヘッダーチェック（古い形式の場合は強制更新）
     const currentHeaders = historySheet.getRange(1, 1, 1, historySheet.getLastColumn()).getValues()[0];
-    if (currentHeaders.length < historyHeaders.length || currentHeaders.indexOf('タイムセール割引額') === -1) {
-      // 安全のため、1行目に新しいヘッダーを上書き
+    if (currentHeaders.indexOf('支払金額小計') === -1 || currentHeaders.length !== historyHeaders.length) {
       historySheet.getRange(1, 1, 1, historyHeaders.length).setValues([historyHeaders]);
-      Logger.log('[submitOrder] 購入履歴シートのヘッダーを更新');
+      Logger.log('[submitOrder] 購入履歴シートのヘッダーを最新形式に更新');
     }
   }
 
@@ -264,23 +263,35 @@ function submitOrder(payload) {
     }
     const subtotalAmount = payload.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const discountAmount = discountRate > 0 ? Math.round(subtotalAmount * (discountRate / 100)) : 0;
-    // const finalTotalAmount = subtotalAmount - discountAmount; // ※メール用等で使用
+    const finalTotalAmount = subtotalAmount - discountAmount;
 
-    const rowsToAppend = payload.cart.map(item => {
+    const rowsToAppend = [];
+    payload.cart.forEach(item => {
       const normalSubtotal = (item.normalPrice || item.price) * item.quantity;
       const timesaleDiscount = normalSubtotal - (item.price * item.quantity);
-      return [
+
+      // 1. 商品行（通常価格で記録）
+      rowsToAppend.push([
         orderId, timestamp, payload.customerInfo.email, payload.customerInfo.school,
-        payload.customerInfo.memberName, item.sku, item.quantity, normalSubtotal, timesaleDiscount, item.price * item.quantity, '未入金',
+        payload.customerInfo.memberName, item.sku, item.quantity, normalSubtotal, '未入金',
         payload.lineUserId || ''
-      ];
+      ]);
+
+      // 2. タイムセール割引行（別の行として記録。支払金額小計にマイナス差分を入れる）
+      if (timesaleDiscount > 0) {
+        rowsToAppend.push([
+          orderId, timestamp, payload.customerInfo.email, payload.customerInfo.school,
+          payload.customerInfo.memberName, `タイムセール割引 (${item.sku})`, item.quantity, -timesaleDiscount, '未入金',
+          payload.lineUserId || ''
+        ]);
+      }
     });
 
     if (discountAmount > 0) {
-      // 会員特典割引行の追加（通常価格小計・タイムセール割引額は0、支払金額小計にマイナス値を設定）
+      // 3. 会員特典割引行の追加（支払金額小計にマイナス値を設定）
       rowsToAppend.push([
         orderId, timestamp, payload.customerInfo.email, payload.customerInfo.school,
-        payload.customerInfo.memberName, '会員特典割引', 1, 0, 0, -discountAmount, '未入金',
+        payload.customerInfo.memberName, '会員特典割引', 1, -discountAmount, '未入金',
         payload.lineUserId || ''
       ]);
     }
