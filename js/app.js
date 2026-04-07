@@ -3,7 +3,7 @@
 // ============================================================
 
 // ---- グローバル状態変数 ----
-let lineUserId = ""; // LINE連携済みの場合にユーザーIDが入る
+let lineUserId = "test"; // LINE連携済みの場合にユーザーIDが入る
 let globalProducts = []; // スプレッドシートから取得した商品一覧
 let cart = []; // カートの中身
 let currentSelectedProduct = null; // モーダルで選択中の商品
@@ -660,8 +660,7 @@ function renderEditableCart() {
 
 		const cartPriceHTML = `
       <div style="text-align: right;">
-        ${hasTimesale ? `<span class="price-original" style="font-size:0.8rem">¥${(item.normalPrice * item.quantity).toLocaleString()}</span><br><strong style="color:var(--danger);">¥${itemSubtotal.toLocaleString()}</strong>` : `<strong style="color:var(--primary-color);">¥${itemSubtotal.toLocaleString()}</strong>`}
-        
+        ${hasTimesale ? `<span class="price-original price-strike" style="font-size:0.8rem">¥${(item.normalPrice * item.quantity).toLocaleString()}</span><br><strong style="color:var(--danger);">¥${itemSubtotal.toLocaleString()}</strong>` : `<strong style="color:var(--primary-color);">¥${itemSubtotal.toLocaleString()}</strong>`}
       </div>`;
 
 		const div = document.createElement("div");
