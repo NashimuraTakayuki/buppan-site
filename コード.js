@@ -339,9 +339,10 @@ function submitOrder(payload) {
       `・${item.productName}（${item.variation}）×${item.quantity}個`
     ).join('\n');
 
-    // 6. 管理者へのLINE通知
+    // 6. 管理者へのLINE通知（アクセス元公式LINEのチャネルで送信）
     try {
-      const ADMIN_USER_ID = 'Ud97518e18c40d4de6d83537a7a05d6c1';
+      const schoolName = payload.lineSource || payload.customerInfo.school;
+      const schoolConfig = getSchoolConfig(schoolName);
       const adminMessage = `🛍️ 新規注文が入りました！\n\n`
         + `【注文ID】 ${orderId}\n`
         + `【注文日時】 ${Utilities.formatDate(timestamp, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm')}\n`
@@ -350,8 +351,8 @@ function submitOrder(payload) {
         + `【メール】 ${payload.customerInfo.email}\n\n`
         + `【注文商品】\n${itemLinesSimple}\n\n`
         + amountText;
-      sendLineNotification(ADMIN_USER_ID, adminMessage);
-      Logger.log('[submitOrder] 管理者LINE通知送信完了');
+      sendLineNotification(schoolConfig.adminId, adminMessage, schoolConfig.token);
+      Logger.log('[submitOrder] 管理者LINE通知送信完了 - スクール: ' + schoolName);
     } catch (lineError) {
       Logger.log('[submitOrder] 管理者LINE通知エラー（注文は完了）: ' + lineError.message);
     }
@@ -560,10 +561,59 @@ function upsertCustomerInfo(ss, lineUserId, customerInfo) {
 }
 
 // ----------------------------------------------------
-// LINE通知送信（管理者・お客さん共用）
+// スクール設定の取得（スクール設定シートを参照）
+// スクール設定シートの列: スクール名 | Messaging_API_Token | 管理者LINE_UserID
 // ----------------------------------------------------
-function sendLineNotification(userId, message) {
-  const LINE_TOKEN = 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=';
+function getSchoolConfig(schoolName) {
+  const DEFAULT_TOKEN = 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=';
+  const DEFAULT_ADMIN_ID = 'Ud97518e18c40d4de6d83537a7a05d6c1';
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('スクール設定');
+    if (!sheet) {
+      Logger.log('[getSchoolConfig] スクール設定シートが見つかりません。デフォルト設定を使用します。');
+      return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+
+    const headers = data[0];
+    const nameIdx = headers.indexOf('スクール名');
+    const tokenIdx = headers.indexOf('Messaging_API_Token');
+    const adminIdx = headers.indexOf('管理者LINE_UserID');
+
+    if (nameIdx === -1 || tokenIdx === -1 || adminIdx === -1) {
+      Logger.log('[getSchoolConfig] スクール設定シートの列が不足しています。デフォルト設定を使用します。');
+      return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
+        const token = String(data[i][tokenIdx]).trim();
+        const adminId = String(data[i][adminIdx]).trim();
+        if (token && adminId) {
+          Logger.log('[getSchoolConfig] スクール「' + schoolName + '」の設定を取得しました。');
+          return { token: token, adminId: adminId };
+        }
+      }
+    }
+
+    Logger.log('[getSchoolConfig] スクール「' + schoolName + '」の設定が見つかりません。デフォルト設定を使用します。');
+    return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+  } catch (e) {
+    Logger.log('[getSchoolConfig] エラー: ' + e.message + ' デフォルト設定を使用します。');
+    return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+  }
+}
+
+// ----------------------------------------------------
+// LINE通知送信（管理者・お客さん共用）
+// token: Messaging API Channel Access Token（省略時はデフォルトチャネル）
+// ----------------------------------------------------
+function sendLineNotification(userId, message, token) {
+  const LINE_TOKEN = token || 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=';
 
   const payload = JSON.stringify({
     to: userId,

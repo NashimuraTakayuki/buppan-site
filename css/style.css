@@ -362,11 +362,11 @@ header {
 	font-weight: normal;
 }
 
-/* 会員価格（緑） */
+/* 会員価格（オレンジ） */
 .price-member-text {
-	color: #00D241;
+	color: var(--primary-color);
 	font-weight: bold;
-	font-size: 1.1rem;
+	font-size: 2rem;
 	margin-left: 4px;
 }
 
@@ -377,10 +377,17 @@ header {
 	font-size: 1.3rem;
 }
 
-/* タイムセールの打ち消し（赤） */
+/* タイムセールの打ち消し（オレンジ） */
 .price-timesale-strike {
-	color: #E52020;
+	color: var(--primary-color);
 	margin-left: 4px;
+}
+
+/* タイムセール＋会員割引 両方適用時の最終価格（赤） */
+.price-member-final {
+	color: #E52020;
+	font-size: 2rem;
+	font-weight: bold;
 }
 
 /* 割引なしの標準価格 */
@@ -412,9 +419,9 @@ header {
 	background-color: #E52020;
 }
 
-/* 会員割引バッジ（緑） */
+/* 会員割引バッジ（オレンジ） */
 .badge-member {
-	background-color: #00D241;
+	background-color: var(--primary-color);
 }
 
 
