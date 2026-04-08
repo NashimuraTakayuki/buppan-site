@@ -397,6 +397,58 @@ function backToTop() {
 // 商品詳細モーダル
 // ============================================================
 
+const APPAREL_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "XXXL", "4XL", "4L", "3L", "2L", "LL"];
+
+function sortSizes(sizes) {
+	const allNumeric = sizes.every((s) => !isNaN(parseFloat(s)) && s.trim() !== "");
+	if (allNumeric) {
+		return [...sizes].sort((a, b) => parseFloat(a) - parseFloat(b));
+	}
+	const allApparel = sizes.every((s) => APPAREL_ORDER.includes(s.toUpperCase()));
+	if (allApparel) {
+		return [...sizes].sort((a, b) => APPAREL_ORDER.indexOf(a.toUpperCase()) - APPAREL_ORDER.indexOf(b.toUpperCase()));
+	}
+	return [...sizes].sort((a, b) => {
+		const aNum = parseFloat(a);
+		const bNum = parseFloat(b);
+		if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+		const aIdx = APPAREL_ORDER.indexOf(a.toUpperCase());
+		const bIdx = APPAREL_ORDER.indexOf(b.toUpperCase());
+		if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+		if (aIdx !== -1) return -1;
+		if (bIdx !== -1) return 1;
+		return a.localeCompare(b, "ja");
+	});
+}
+
+function makeSizeBtnGroup(container, items, onSelect) {
+	container.innerHTML = "";
+	items.forEach((item, i) => {
+		const btn = document.createElement("button");
+		btn.type = "button";
+		btn.value = item.value;
+		if (item.stock !== undefined) {
+			btn.dataset.stock = item.stock;
+			btn.dataset.sku = item.sku || "";
+		}
+		btn.textContent = item.label;
+		const outOfStock = item.stock !== undefined && item.stock <= 0;
+		btn.disabled = outOfStock;
+		btn.className = "size-btn" + (outOfStock ? " disabled" : "");
+		btn.addEventListener("click", () => {
+			if (btn.disabled) return;
+			container.querySelectorAll(".size-btn").forEach((b) => b.classList.remove("selected"));
+			btn.classList.add("selected");
+			onSelect(btn);
+		});
+		container.appendChild(btn);
+	});
+	// 最初の有効なボタンを選択状態にする
+	const firstValid = container.querySelector(".size-btn:not(:disabled)");
+	if (firstValid) firstValid.classList.add("selected");
+	else if (container.firstChild) container.firstChild.classList.add("selected");
+}
+
 function openModal(productId) {
 	const p = globalProducts.find((prod) => String(prod["商品ID"]) === String(productId));
 	if (!p) return;
@@ -432,24 +484,24 @@ function openModal(productId) {
 	}
 
 	document.getElementById("modal-title").innerText = p["商品名"];
+
 	document.getElementById("modal-price").innerHTML = buildPriceHTML(p, memberDiscountRate, !!lineUserId);
 	document.getElementById("modal-desc").innerText = p["商品説明"] || "";
 
 	// SKU（サイズ/カラー）選択肢の初期化（分割版）
-	const sizes = [];
+	const rawSizes = [];
 	p.stockList.forEach((stock) => {
 		const s = String(stock["サイズ"]);
-		if (!sizes.includes(s)) sizes.push(s);
+		if (!rawSizes.includes(s)) rawSizes.push(s);
 	});
+	const sizes = sortSizes(rawSizes);
 
 	const sizeSelect = document.getElementById("modal-size");
-	sizeSelect.innerHTML = "";
-	sizes.forEach((size) => {
-		const option = document.createElement("option");
-		option.value = size;
-		option.text = size;
-		sizeSelect.appendChild(option);
-	});
+	makeSizeBtnGroup(
+		sizeSelect,
+		sizes.map((s) => ({ value: s, label: s })),
+		() => onSizeChange()
+	);
 
 	const hasNoSize = sizes.length === 0 || (sizes.length === 1 && (!sizes[0] || sizes[0] === "None" || sizes[0] === "-" || sizes[0] === "なし" || sizes[0].trim() === ""));
 	sizeSelect.style.display = hasNoSize ? "none" : "";
@@ -472,42 +524,28 @@ function closeModal() {
 function onSizeChange() {
 	if (!currentSelectedProduct) return;
 	const sizeSelect = document.getElementById("modal-size");
-	const selIdx = Math.max(0, sizeSelect.selectedIndex);
-	const size = sizeSelect.options[selIdx] ? sizeSelect.options[selIdx].value : "";
-	const colorSelect = document.getElementById("modal-color");
-	colorSelect.innerHTML = "";
+	const selectedBtn = sizeSelect.querySelector(".size-btn.selected");
+	const size = selectedBtn ? selectedBtn.value : "";
+	const colorGroup = document.getElementById("modal-color");
 
 	const availableStocks = currentSelectedProduct.stockList.filter((stock) => String(stock["サイズ"]) === size);
 
-	let firstValidIndex = -1;
-	availableStocks.forEach((stock, idx) => {
-		const stockNum = Number(stock["在庫数"]) || 0;
-		const option = document.createElement("option");
-		const c = String(stock["カラー"]);
-		option.value = c;
-		option.dataset.stock = stockNum;
-		option.dataset.sku = stock["SKU"];
-		option.text = c; // 在庫表記は数量ラベルへ移動
-		if (stockNum <= 0) {
-			option.disabled = true;
-		} else if (firstValidIndex === -1) {
-			firstValidIndex = idx; // 最初の有効な選択肢を記憶
-		}
-		colorSelect.appendChild(option);
-	});
-
-	// 在庫ありの選択肢がデフォルトで選ばれるように設定（バグ防止）
-	if (firstValidIndex !== -1) {
-		colorSelect.selectedIndex = firstValidIndex;
-	} else if (availableStocks.length > 0) {
-		colorSelect.selectedIndex = 0;
-	}
+	makeSizeBtnGroup(
+		colorGroup,
+		availableStocks.map((stock) => ({
+			value: String(stock["カラー"]),
+			label: String(stock["カラー"]),
+			stock: Number(stock["在庫数"]) || 0,
+			sku: stock["SKU"],
+		})),
+		() => updateMaxQuantity()
+	);
 
 	const hasNoColor = availableStocks.length === 0 || (availableStocks.length === 1 && (!availableStocks[0]["カラー"] || availableStocks[0]["カラー"] === "None" || availableStocks[0]["カラー"] === "-" || availableStocks[0]["カラー"] === "なし" || availableStocks[0]["カラー"].trim() === ""));
-	const colorHidden = hasNoColor;
-	colorSelect.style.display = colorHidden ? "none" : "";
+	colorGroup.style.display = hasNoColor ? "none" : "";
 
-	const sizeHidden = sizeSelect.style.display === "none";
+	const sizeHidden = sizeSelect.style.display === "none" || !sizeSelect.querySelector(".size-btn");
+	const colorHidden = hasNoColor;
 	const group = document.getElementById("modal-variant-group");
 	const variantLabel = document.getElementById("modal-variant-label");
 
@@ -522,15 +560,13 @@ function onSizeChange() {
 		}
 	}
 
-	// カラーが切り替わったので最大数量も再計算
 	updateMaxQuantity();
 }
 
 function updateMaxQuantity() {
-	const colorSelect = document.getElementById("modal-color");
-	const selIdx = Math.max(0, colorSelect.selectedIndex);
-	const selectedOption = colorSelect.options[selIdx];
-	const maxStock = selectedOption ? Number(selectedOption.dataset.stock) : 0;
+	const colorGroup = document.getElementById("modal-color");
+	const selectedColorBtn = colorGroup.querySelector(".size-btn.selected");
+	const maxStock = selectedColorBtn ? Number(selectedColorBtn.dataset.stock) : 0;
 	const qtyInput = document.getElementById("modal-qty");
 	const addBtn = document.getElementById("modal-add-btn");
 	const qtyLabel = document.getElementById("modal-qty-label");
@@ -563,15 +599,14 @@ function changeModalQty(delta) {
 /** 商品をカートに追加 */
 function addToCart() {
 	const sizeSelect = document.getElementById("modal-size");
-	const colorSelect = document.getElementById("modal-color");
-	const selIdx = Math.max(0, colorSelect.selectedIndex);
-	const selectedColorOption = colorSelect.options[selIdx];
+	const colorGroup = document.getElementById("modal-color");
+	const selectedColorBtn = colorGroup.querySelector(".size-btn.selected");
 
-	if (!selectedColorOption) return; // 万が一のためのフェールセーフ
+	if (!selectedColorBtn) return; // 万が一のためのフェールセーフ
 
-	const sku = selectedColorOption.dataset.sku;
+	const sku = selectedColorBtn.dataset.sku;
 	const qty = Number(document.getElementById("modal-qty").value);
-	const maxStock = Number(selectedColorOption.dataset.stock);
+	const maxStock = Number(selectedColorBtn.dataset.stock);
 
 	if (qty > maxStock) {
 		alert("在庫数を超えてカートに入れることはできません。");
@@ -580,8 +615,9 @@ function addToCart() {
 
 	const existingItem = cart.find((item) => item.sku === sku);
 	const variationTexts = [];
-	if (sizeSelect.style.display !== "none") variationTexts.push(`サイズ: ${sizeSelect.value}`);
-	if (colorSelect.style.display !== "none") variationTexts.push(`カラー: ${colorSelect.value}`);
+	const selectedSizeBtn = sizeSelect.querySelector(".size-btn.selected");
+	if (sizeSelect.style.display !== "none" && selectedSizeBtn) variationTexts.push(`サイズ: ${selectedSizeBtn.value}`);
+	if (colorGroup.style.display !== "none") variationTexts.push(`カラー: ${selectedColorBtn.value}`);
 	const variationName = variationTexts.join(" / ");
 
 	if (existingItem) {

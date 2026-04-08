@@ -596,13 +596,45 @@ header {
    ============================================================ */
 .select-group {
 	display: flex;
-	gap: 8px;
+	flex-direction: column;
+	gap: 12px;
 	width: 100%;
 }
 
-.select-group select {
+.size-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	text-decoration: line-through;
+}
+
+.size-btn-group {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	flex: 1;
-	min-width: 0;
+}
+
+.size-btn {
+	padding: 8px 16px;
+	border: 1.5px solid #d1d5db;
+	border-radius: 8px;
+	background: #fff;
+	font-size: 0.9rem;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s, color 0.15s;
+	line-height: 1.4;
+}
+
+.size-btn.selected {
+	border-color: var(--primary-color);
+	background: var(--primary-color);
+	color: #fff;
+	font-weight: 600;
+}
+
+.size-btn:hover:not(.selected) {
+	border-color: var(--primary-color);
+	color: var(--primary-color);
 }
 
 /* ============================================================
