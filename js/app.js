@@ -3,7 +3,8 @@
 // ============================================================
 
 // ---- グローバル状態変数 ----
-let lineUserId = "test"; // LINE連携済みの場合にユーザーIDが入る
+let lineUserId = ""; // LINE連携済みの場合にユーザーIDが入る
+let lineSource = ""; // アクセス元の公式LINE識別子（URLパラメータ ?source= から取得）
 let globalProducts = []; // スプレッドシートから取得した商品一覧
 let cart = []; // カートの中身
 let currentSelectedProduct = null; // モーダルで選択中の商品
@@ -39,6 +40,9 @@ window.onload = async function () {
 	const params = new URLSearchParams(window.location.search);
 	const lineCode = params.get("code");
 	const isLineApp = /Line\//.test(navigator.userAgent);
+
+	// --- アクセス元公式LINE識別子の取得（LIFFリンクに ?source=xxx を付与して使用）---
+	lineSource = params.get("source") || "";
 
 	if (lineCode) {
 		try {
@@ -767,6 +771,7 @@ async function executeSubmitOrder() {
 		customerInfo: customerInfo,
 		cart: cart,
 		lineUserId: lineUserId,
+		lineSource: lineSource,
 	};
 
 	const btn = document.getElementById("submit-btn");
