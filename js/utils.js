@@ -50,7 +50,7 @@ function buildPriceHTML(product, memberRate = 0, isLinked = false) {
           <span class="price-original price-strike">¥${normalPrice.toLocaleString()}</span>
           <span class="price-timesale-strike price-strike">¥${timesalePrice.toLocaleString()}</span>
         </div>
-        <div class="price-member-text">
+        <div class="price-member-final">
           ¥${memberPrice.toLocaleString()}
         </div>
       `;
