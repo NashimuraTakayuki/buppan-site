@@ -3,7 +3,7 @@
 // ============================================================
 
 // ---- グローバル状態変数 ----
-let lineUserId = "test"; // LINE連携済みの場合にユーザーIDが入る
+let lineUserId = ""; // LINE連携済みの場合にユーザーIDが入る
 let globalProducts = []; // スプレッドシートから取得した商品一覧
 let cart = []; // カートの中身
 let currentSelectedProduct = null; // モーダルで選択中の商品
