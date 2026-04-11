@@ -11,7 +11,7 @@ let currentSelectedProduct = null; // モーダルで選択中の商品
 let customerInfo = { email: "", school: "", memberName: "" };
 let currentCategory = "すべて";
 let isProductLoaded = false; // 商品データ取得完了フラグ
-let memberDiscountRate = 0;  // 会員特典情報シートから取得した割引率（%）
+let memberDiscountRate = 0; // 会員特典情報シートから取得した割引率（%）
 
 // ============================================================
 // 初期化（ページ読み込み時）
@@ -25,7 +25,7 @@ window.onload = async function () {
 			customerInfo = info;
 			if (info.email) document.getElementById("input-email").value = info.email;
 			if (info.memberName) document.getElementById("input-name").value = info.memberName;
-		} catch (e) { }
+		} catch (e) {}
 	}
 
 	// --- LocalStorage からカートを復元 ---
@@ -33,7 +33,7 @@ window.onload = async function () {
 	if (savedCart) {
 		try {
 			cart = JSON.parse(savedCart);
-		} catch (e) { }
+		} catch (e) {}
 	}
 
 	// --- LINE Login コールバック処理 ---
@@ -42,7 +42,18 @@ window.onload = async function () {
 	const isLineApp = /Line\//.test(navigator.userAgent);
 
 	// --- アクセス元公式LINE識別子の取得（LIFFリンクに ?source=xxx を付与して使用）---
+	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
 	lineSource = params.get("source") || "";
+	if (!lineSource) {
+		const liffState = params.get("liff.state");
+		if (liffState) {
+			try {
+				const decoded = decodeURIComponent(liffState);
+				const liffParams = new URLSearchParams(decoded.replace(/^\?/, ""));
+				lineSource = liffParams.get("source") || "";
+			} catch (e) {}
+		}
+	}
 
 	if (lineCode) {
 		try {
@@ -62,7 +73,7 @@ window.onload = async function () {
 		// LINE UserID で顧客情報を取得してフォームに自動入力
 		gasGet("getCustomerInfoByLineId", { lineUserId })
 			.then(prefillCustomerInfo)
-			.catch(() => { });
+			.catch(() => {});
 	} else if (isLineApp) {
 		// LINE アプリ内でアクセスしていて未連携なら認証へリダイレクト
 		window.location.href = LINE_AUTH_URL;
@@ -192,8 +203,11 @@ function renderCategoryTabs() {
 	globalProducts.forEach((p) => {
 		const catString = p["カテゴリ"];
 		if (catString) {
-			const cats = String(catString).split(",").map(c => c.trim()).filter(c => c !== "");
-			cats.forEach(cat => {
+			const cats = String(catString)
+				.split(",")
+				.map((c) => c.trim())
+				.filter((c) => c !== "");
+			cats.forEach((cat) => {
 				if (!categories.includes(cat)) categories.push(cat);
 			});
 		}
@@ -222,10 +236,12 @@ function renderProductGrid(category) {
 		category === "すべて"
 			? globalProducts
 			: globalProducts.filter((p) => {
-				const catString = p["カテゴリ"] || "";
-				const cats = String(catString).split(",").map(c => c.trim());
-				return cats.includes(category);
-			});
+					const catString = p["カテゴリ"] || "";
+					const cats = String(catString)
+						.split(",")
+						.map((c) => c.trim());
+					return cats.includes(category);
+				});
 
 	if (filteredProducts.length === 0) {
 		app.innerHTML =
@@ -239,7 +255,10 @@ function renderProductGrid(category) {
 		const isOutOfStock = totalStock <= 0;
 
 		const rawThumbnails = p["サムネイル画像"] ? String(p["サムネイル画像"]) : "";
-		const thumbUrls = rawThumbnails.split(/[\s,]+/).map(normalizeDriveUrl).filter(u => u.length > 0);
+		const thumbUrls = rawThumbnails
+			.split(/[\s,]+/)
+			.map(normalizeDriveUrl)
+			.filter((u) => u.length > 0);
 		const imgSrc = thumbUrls[0] || "";
 		const imgHtml = imgSrc
 			? `<img src="${imgSrc}" class="product-img" alt="${p["商品名"]}" onerror="this.style.display='none'">`
@@ -343,7 +362,7 @@ function goToCart() {
 	window.scrollTo(0, 0);
 	// --- 初期表示の更新 ---
 	updateCartUI();
-};
+}
 
 /** 商品一覧に戻る */
 function backToShopping() {
@@ -374,7 +393,7 @@ function backToTop() {
 					}
 				}
 			}
-		} catch (e) { }
+		} catch (e) {}
 	} else {
 		customerInfo = { email: "", school: "", memberName: "" };
 		["input-email", "input-school", "input-name"].forEach((id) => {
@@ -397,7 +416,22 @@ function backToTop() {
 // 商品詳細モーダル
 // ============================================================
 
-const APPAREL_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "XXXL", "4XL", "4L", "3L", "2L", "LL"];
+const APPAREL_ORDER = [
+	"XS",
+	"S",
+	"M",
+	"L",
+	"XL",
+	"XXL",
+	"2XL",
+	"3XL",
+	"XXXL",
+	"4XL",
+	"4L",
+	"3L",
+	"2L",
+	"LL",
+];
 
 function sortSizes(sizes) {
 	const allNumeric = sizes.every((s) => !isNaN(parseFloat(s)) && s.trim() !== "");
@@ -406,7 +440,9 @@ function sortSizes(sizes) {
 	}
 	const allApparel = sizes.every((s) => APPAREL_ORDER.includes(s.toUpperCase()));
 	if (allApparel) {
-		return [...sizes].sort((a, b) => APPAREL_ORDER.indexOf(a.toUpperCase()) - APPAREL_ORDER.indexOf(b.toUpperCase()));
+		return [...sizes].sort(
+			(a, b) => APPAREL_ORDER.indexOf(a.toUpperCase()) - APPAREL_ORDER.indexOf(b.toUpperCase()),
+		);
 	}
 	return [...sizes].sort((a, b) => {
 		const aNum = parseFloat(a);
@@ -453,7 +489,7 @@ function openModal(productId) {
 	const p = globalProducts.find((prod) => String(prod["商品ID"]) === String(productId));
 	if (!p) return;
 	currentSelectedProduct = p;
-	console.log(p)
+	console.log(p);
 	// 画像ギャラリー
 	const imageGallery = document.getElementById("modal-images");
 	imageGallery.innerHTML = "";
@@ -485,7 +521,11 @@ function openModal(productId) {
 
 	document.getElementById("modal-title").innerText = p["商品名"];
 
-	document.getElementById("modal-price").innerHTML = buildPriceHTML(p, memberDiscountRate, !!lineUserId);
+	document.getElementById("modal-price").innerHTML = buildPriceHTML(
+		p,
+		memberDiscountRate,
+		!!lineUserId,
+	);
 	document.getElementById("modal-desc").innerText = p["商品説明"] || "";
 
 	// SKU（サイズ/カラー）選択肢の初期化（分割版）
@@ -500,10 +540,17 @@ function openModal(productId) {
 	makeSizeBtnGroup(
 		sizeSelect,
 		sizes.map((s) => ({ value: s, label: s })),
-		() => onSizeChange()
+		() => onSizeChange(),
 	);
 
-	const hasNoSize = sizes.length === 0 || (sizes.length === 1 && (!sizes[0] || sizes[0] === "None" || sizes[0] === "-" || sizes[0] === "なし" || sizes[0].trim() === ""));
+	const hasNoSize =
+		sizes.length === 0 ||
+		(sizes.length === 1 &&
+			(!sizes[0] ||
+				sizes[0] === "None" ||
+				sizes[0] === "-" ||
+				sizes[0] === "なし" ||
+				sizes[0].trim() === ""));
 	sizeSelect.style.display = hasNoSize ? "none" : "";
 
 	// サイズに合わせてカラーを初期生成し、数量更新
@@ -528,7 +575,9 @@ function onSizeChange() {
 	const size = selectedBtn ? selectedBtn.value : "";
 	const colorGroup = document.getElementById("modal-color");
 
-	const availableStocks = currentSelectedProduct.stockList.filter((stock) => String(stock["サイズ"]) === size);
+	const availableStocks = currentSelectedProduct.stockList.filter(
+		(stock) => String(stock["サイズ"]) === size,
+	);
 
 	makeSizeBtnGroup(
 		colorGroup,
@@ -538,10 +587,17 @@ function onSizeChange() {
 			stock: Number(stock["在庫数"]) || 0,
 			sku: stock["SKU"],
 		})),
-		() => updateMaxQuantity()
+		() => updateMaxQuantity(),
 	);
 
-	const hasNoColor = availableStocks.length === 0 || (availableStocks.length === 1 && (!availableStocks[0]["カラー"] || availableStocks[0]["カラー"] === "None" || availableStocks[0]["カラー"] === "-" || availableStocks[0]["カラー"] === "なし" || availableStocks[0]["カラー"].trim() === ""));
+	const hasNoColor =
+		availableStocks.length === 0 ||
+		(availableStocks.length === 1 &&
+			(!availableStocks[0]["カラー"] ||
+				availableStocks[0]["カラー"] === "None" ||
+				availableStocks[0]["カラー"] === "-" ||
+				availableStocks[0]["カラー"] === "なし" ||
+				availableStocks[0]["カラー"].trim() === ""));
 	colorGroup.style.display = hasNoColor ? "none" : "";
 
 	const sizeHidden = sizeSelect.style.display === "none" || !sizeSelect.querySelector(".size-btn");
@@ -616,7 +672,8 @@ function addToCart() {
 	const existingItem = cart.find((item) => item.sku === sku);
 	const variationTexts = [];
 	const selectedSizeBtn = sizeSelect.querySelector(".size-btn.selected");
-	if (sizeSelect.style.display !== "none" && selectedSizeBtn) variationTexts.push(`サイズ: ${selectedSizeBtn.value}`);
+	if (sizeSelect.style.display !== "none" && selectedSizeBtn)
+		variationTexts.push(`サイズ: ${selectedSizeBtn.value}`);
 	if (colorGroup.style.display !== "none") variationTexts.push(`カラー: ${selectedColorBtn.value}`);
 	const variationName = variationTexts.join(" / ");
 
@@ -662,9 +719,8 @@ function updateCartUI() {
 	});
 
 	// 会員特典情報シートの割引率を適用（LINE連携済みの場合のみ）
-	const sheetDiscount = !!lineUserId && memberDiscountRate > 0
-		? subtotal * (memberDiscountRate / 100)
-		: 0;
+	const sheetDiscount =
+		!!lineUserId && memberDiscountRate > 0 ? subtotal * (memberDiscountRate / 100) : 0;
 	const total = subtotal - sheetDiscount;
 
 	const isProductListVisible =
