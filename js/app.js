@@ -54,6 +54,12 @@ window.onload = async function () {
 			} catch (e) {}
 		}
 	}
+	// LINE Login リダイレクト後も source を引き継ぐため localStorage に退避・復元する
+	if (lineSource) {
+		localStorage.setItem("aslish_line_source", lineSource);
+	} else {
+		lineSource = localStorage.getItem("aslish_line_source") || "";
+	}
 
 	if (lineCode) {
 		try {
