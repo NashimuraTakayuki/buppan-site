@@ -1,4 +1,41 @@
 // ----------------------------------------------------
+// スプレッドシートへのログ記録ヘルパー
+// level: 'INFO' | 'WARN' | 'ERROR'
+// source: 呼び出し元の関数名
+// ----------------------------------------------------
+function writeLog(level, source, message) {
+  // GASエディタの実行ログにも出力
+  Logger.log('[' + level + '][' + source + '] ' + message);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let logSheet = ss.getSheetByName('実行ログ');
+    if (!logSheet) {
+      logSheet = ss.insertSheet('実行ログ');
+      const headers = ['タイムスタンプ', 'レベル', '関数名', 'メッセージ'];
+      logSheet.appendRow(headers);
+      logSheet.setFrozenRows(1);
+      logSheet.getRange(1, 1, 1, headers.length)
+        .setFontWeight('bold')
+        .setBackground('#f3f4f6');
+      logSheet.setColumnWidth(1, 165);
+      logSheet.setColumnWidth(2, 65);
+      logSheet.setColumnWidth(3, 190);
+      logSheet.setColumnWidth(4, 520);
+    }
+    logSheet.appendRow([new Date(), level, source, message]);
+
+    // 1000行を超えたら古い行から削除（ヘッダー行は残す）
+    const lastRow = logSheet.getLastRow();
+    if (lastRow > 1001) {
+      logSheet.deleteRows(2, lastRow - 1001);
+    }
+  } catch (e) {
+    Logger.log('[writeLog] ログシートへの書き込みに失敗: ' + e.message);
+  }
+}
+
+// ----------------------------------------------------
 // GET リクエスト：読み取り系APIエンドポイント
 // ----------------------------------------------------
 function doGet(e) {
@@ -22,7 +59,7 @@ function doGet(e) {
         result = { error: 'Unknown action: ' + action };
     }
   } catch (err) {
-    Logger.log('[doGet] エラー: ' + err.message);
+    writeLog('ERROR', 'doGet', 'action=' + action + ' / ' + err.message);
     result = { error: err.message };
   }
   return ContentService.createTextOutput(JSON.stringify(result))
@@ -55,7 +92,7 @@ function doPost(e) {
         result = { error: 'Unknown action: ' + action };
     }
   } catch (err) {
-    Logger.log('[doPost] エラー: ' + err.message);
+    writeLog('ERROR', 'doPost', 'action=' + action + ' / ' + err.message);
     result = { error: err.message };
   }
   return ContentService.createTextOutput(JSON.stringify(result))
@@ -82,7 +119,11 @@ function getLineUserIdFromCode(code) {
     muteHttpExceptions: true
   });
   const tokenData = JSON.parse(tokenRes.getContentText());
-  if (!tokenData.access_token) throw new Error('トークン取得失敗: ' + tokenRes.getContentText());
+  if (!tokenData.access_token) {
+    const msg = 'トークン取得失敗: ' + tokenRes.getContentText();
+    writeLog('ERROR', 'getLineUserIdFromCode', msg);
+    throw new Error(msg);
+  }
 
   // プロフィール（userId）取得
   const profileRes = UrlFetchApp.fetch('https://api.line.me/v2/profile', {
@@ -90,7 +131,11 @@ function getLineUserIdFromCode(code) {
     muteHttpExceptions: true
   });
   const profile = JSON.parse(profileRes.getContentText());
-  if (!profile.userId) throw new Error('プロフィール取得失敗: ' + profileRes.getContentText());
+  if (!profile.userId) {
+    const msg = 'プロフィール取得失敗: ' + profileRes.getContentText();
+    writeLog('ERROR', 'getLineUserIdFromCode', msg);
+    throw new Error(msg);
+  }
 
   return profile.userId;
 }
@@ -193,7 +238,7 @@ function getProductAndInventoryData() {
 // カートの一括注文と個人情報を処理する関数
 // ----------------------------------------------------
 function submitOrder(payload) {
-  Logger.log('[submitOrder] 開始 - メールアドレス: ' + payload.customerInfo.email + ', カート商品数: ' + payload.cart.length);
+  writeLog('INFO', 'submitOrder', '開始 - メール: ' + payload.customerInfo.email + ' / スクール: ' + (payload.lineSource || payload.customerInfo.school) + ' / カート商品数: ' + payload.cart.length);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   // 購入履歴シートの確認・作成
@@ -238,7 +283,7 @@ function submitOrder(payload) {
       }
       Logger.log('[submitOrder] SKU: ' + item.sku + ' / 在庫: ' + currentStock + ' / 注文数: ' + item.quantity);
       if (targetRow === -1 || currentStock < item.quantity) {
-        Logger.log('[submitOrder] 在庫不足エラー - SKU: ' + item.sku);
+        writeLog('WARN', 'submitOrder', '在庫不足 - SKU: ' + item.sku + ' / 在庫: ' + currentStock + ' / 注文数: ' + item.quantity);
         return { success: false, message: `【在庫不足】 ${item.sku} の在庫が確保できませんでした。他の人が先に購入した可能性があります。` };
       }
       stockUpdates.push({ row: targetRow, sku: item.sku, currentStock: currentStock, newStock: currentStock - item.quantity });
@@ -297,7 +342,7 @@ function submitOrder(payload) {
     }
 
     historySheet.getRange(historySheet.getLastRow() + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
-    Logger.log('[submitOrder] 購入履歴書き込み完了 - 注文ID: ' + orderId);
+    writeLog('INFO', 'submitOrder', '購入履歴書き込み完了 - 注文ID: ' + orderId + ' / 合計: ¥' + finalTotalAmount.toLocaleString());
 
     // 金額表記用の文字列作成 (割引の有無で分岐)
     let amountText = `【小計金額】 ¥${subtotalAmount.toLocaleString()}\n`;
@@ -332,7 +377,7 @@ function submitOrder(payload) {
       Logger.log('[submitOrder] 確認メール送信完了 - 宛先: ' + payload.customerInfo.email);
     } catch (mailError) {
       // メール送信に失敗しても注文自体は成功扱いにする
-      Logger.log('[submitOrder] メール送信エラー（注文は完了）: ' + mailError.message);
+      writeLog('ERROR', 'submitOrder', 'メール送信エラー（注文は完了） - 宛先: ' + payload.customerInfo.email + ' / ' + mailError.message);
     }
 
     const itemLinesSimple = payload.cart.map(item =>
@@ -352,9 +397,9 @@ function submitOrder(payload) {
         + `【注文商品】\n${itemLinesSimple}\n\n`
         + amountText;
       sendLineNotification(schoolConfig.adminId, adminMessage, schoolConfig.token);
-      Logger.log('[submitOrder] 管理者LINE通知送信完了 - スクール: ' + schoolName);
+      writeLog('INFO', 'submitOrder', '管理者LINE通知送信完了 - スクール: ' + schoolName + ' / adminId: ' + schoolConfig.adminId);
     } catch (lineError) {
-      Logger.log('[submitOrder] 管理者LINE通知エラー（注文は完了）: ' + lineError.message);
+      writeLog('ERROR', 'submitOrder', '管理者LINE通知エラー（注文は完了） - スクール: ' + schoolName + ' / ' + lineError.message);
     }
 
     // 7. お客さんへのLINE通知
@@ -372,7 +417,7 @@ function submitOrder(payload) {
         sendLineNotification(payload.lineUserId, customerMessage);
         Logger.log('[submitOrder] お客さんLINE通知送信完了 - UserID: ' + payload.lineUserId);
       } catch (lineError) {
-        Logger.log('[submitOrder] お客さんLINE通知エラー（注文は完了）: ' + lineError.message);
+        writeLog('ERROR', 'submitOrder', 'お客さんLINE通知エラー（注文は完了） - UserID: ' + payload.lineUserId + ' / ' + lineError.message);
       }
     } else {
       Logger.log('[submitOrder] LINE UserIDなし - お客さんへの通知をスキップ');
@@ -391,7 +436,7 @@ function submitOrder(payload) {
     return { success: true, message: "注文が正常に完了しました！", orderId: orderId };
 
   } catch (e) {
-    Logger.log('[submitOrder] システムエラー: ' + e.message);
+    writeLog('ERROR', 'submitOrder', 'システムエラー: ' + e.message);
     return { success: false, message: "システムエラーが発生しました: " + e.message };
   } finally {
     lock.releaseLock();
@@ -600,10 +645,10 @@ function getSchoolConfig(schoolName) {
       }
     }
 
-    Logger.log('[getSchoolConfig] スクール「' + schoolName + '」の設定が見つかりません。デフォルト設定を使用します。');
+    writeLog('WARN', 'getSchoolConfig', 'スクール「' + schoolName + '」の設定が見つかりません。デフォルト設定を使用します。');
     return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
   } catch (e) {
-    Logger.log('[getSchoolConfig] エラー: ' + e.message + ' デフォルト設定を使用します。');
+    writeLog('ERROR', 'getSchoolConfig', e.message + ' / デフォルト設定を使用します。');
     return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
   }
 }
@@ -632,7 +677,9 @@ function sendLineNotification(userId, message, token) {
   const responseCode = response.getResponseCode();
   Logger.log('[sendLineNotification] レスポンスコード: ' + responseCode);
   if (responseCode !== 200) {
-    throw new Error('LINE API エラー: ' + responseCode + ' / ' + response.getContentText());
+    const errMsg = 'LINE API エラー: ' + responseCode + ' / ' + response.getContentText();
+    writeLog('ERROR', 'sendLineNotification', 'userId: ' + userId + ' / ' + errMsg);
+    throw new Error(errMsg);
   }
 }
 
