@@ -1,3 +1,21 @@
+// ============================================================
+// 設定値（ここを編集するだけで全体に反映されます）
+// ============================================================
+const CONFIG = {
+  // LINE Login チャネル設定（LINE Developers Console > LINE Login チャネル）
+  lineLogin: {
+    channelId:     '2009555332',
+    channelSecret: 'e33b101940df1867d28259321e2f4b8b',
+    redirectUri:   'https://playful-dasik-759d42.netlify.app/',
+  },
+
+  // デフォルトの通知先（スクール設定シートに該当スクールがない場合に使用）
+  defaultNotification: {
+    messagingApiToken: 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=',
+    adminLineUserId:   'Ud97518e18c40d4de6d83537a7a05d6c1',
+  },
+};
+
 // ----------------------------------------------------
 // スプレッドシートへのログ記録ヘルパー
 // level: 'INFO' | 'WARN' | 'ERROR'
@@ -103,9 +121,9 @@ function doPost(e) {
 // LINE Login OAuthコードをユーザーIDに交換
 // ----------------------------------------------------
 function getLineUserIdFromCode(code) {
-  const CHANNEL_ID = '2009555332';
-  const CHANNEL_SECRET = 'e33b101940df1867d28259321e2f4b8b';
-  const REDIRECT_URI = 'https://playful-dasik-759d42.netlify.app/';
+  const CHANNEL_ID     = CONFIG.lineLogin.channelId;
+  const CHANNEL_SECRET = CONFIG.lineLogin.channelSecret;
+  const REDIRECT_URI   = CONFIG.lineLogin.redirectUri;
 
   // アクセストークン取得
   const tokenRes = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/token', {
@@ -615,8 +633,8 @@ function upsertCustomerInfo(ss, lineUserId, customerInfo) {
 // スクール設定シートの列: スクール名 | Messaging_API_Token | 管理者LINE_UserID
 // ----------------------------------------------------
 function getSchoolConfig(schoolName) {
-  const DEFAULT_TOKEN = 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=';
-  const DEFAULT_ADMIN_ID = 'Ud97518e18c40d4de6d83537a7a05d6c1';
+  const DEFAULT_TOKEN    = CONFIG.defaultNotification.messagingApiToken;
+  const DEFAULT_ADMIN_ID = CONFIG.defaultNotification.adminLineUserId;
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -663,7 +681,7 @@ function getSchoolConfig(schoolName) {
 // token: Messaging API Channel Access Token（省略時はデフォルトチャネル）
 // ----------------------------------------------------
 function sendLineNotification(userId, message, token) {
-  const LINE_TOKEN = token || 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=';
+  const LINE_TOKEN = token || CONFIG.defaultNotification.messagingApiToken;
 
   const payload = JSON.stringify({
     to: userId,
