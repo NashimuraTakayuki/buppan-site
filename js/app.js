@@ -169,7 +169,7 @@ function initSchoolSelect(schools) {
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
 	// 優先順位: LocalStorage保存済み > lineSource(LIFFリンクのsourceパラメータ) > 未選択
 	const sourceCandidate = schools.includes(lineSource) ? lineSource : "";
-	const initialSchool = customerInfo.school || sourceCandidate;
+	const initialSchool = sourceCandidate || customerInfo.school;
 	// デバッグ情報を画面に追記
 	const _dbgEl = document.querySelector("div[style*='DEBUG']");
 	if (_dbgEl) {
