@@ -141,20 +141,25 @@ function getLineUserIdFromCode(code) {
 }
 
 // ----------------------------------------------------
-// スクール一覧をフロントエンドに渡す関数
+// スクール一覧をフロントエンドに渡す関数（スクール設定シートから取得）
 // ----------------------------------------------------
 function getSchoolList() {
   Logger.log('[getSchoolList] 開始');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('スクール一覧');
+  const sheet = ss.getSheetByName('スクール設定');
   if (!sheet) {
-    Logger.log('[getSchoolList] スクール一覧シートが見つかりません');
+    writeLog('ERROR', 'getSchoolList', 'スクール設定シートが見つかりません');
     return [];
   }
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
-  data.shift(); // ヘッダー行を除く
-  const schools = data.map(row => String(row[0]).trim()).filter(s => s.length > 0);
+  const headers = data[0];
+  const nameIdx = headers.indexOf('スクール名');
+  if (nameIdx === -1) {
+    writeLog('ERROR', 'getSchoolList', 'スクール設定シートに「スクール名」列が見つかりません');
+    return [];
+  }
+  const schools = data.slice(1).map(row => String(row[nameIdx]).trim()).filter(s => s.length > 0);
   Logger.log('[getSchoolList] スクール数: ' + schools.length);
   return schools;
 }
