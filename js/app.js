@@ -198,7 +198,8 @@ function prefillCustomerInfo(info) {
 	if (!info) return;
 	if (info.email) document.getElementById("input-email").value = info.email;
 	if (info.memberName) document.getElementById("input-name").value = info.memberName;
-	if (info.school) {
+	// lineSource がある場合はLIFFリンクの source を優先するためスクールの上書きをしない
+	if (info.school && !lineSource) {
 		const trySet = (attempt) => {
 			const select = document.getElementById("input-school");
 			for (let i = 0; i < select.options.length; i++) {
