@@ -147,13 +147,19 @@ function initSchoolSelect(schools) {
 		return;
 	}
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
+	// 優先順位: LocalStorage保存済み > lineSource(LIFFリンクのsourceパラメータ) > 未選択
+	const sourceCandidate = schools.includes(lineSource) ? lineSource : "";
+	const initialSchool = customerInfo.school || sourceCandidate;
 	schools.forEach((school) => {
 		const option = document.createElement("option");
 		option.value = school;
 		option.textContent = school;
-		if (customerInfo.school === school) option.selected = true;
+		if (initialSchool === school) option.selected = true;
 		select.appendChild(option);
 	});
+	if (!customerInfo.school && sourceCandidate) {
+		customerInfo.school = sourceCandidate;
+	}
 	// LocalStorage に値があればバリデーション（緑枠）を適用
 	["input-email", "input-name", "input-school"].forEach((id) => {
 		if (document.getElementById(id).value) validateField(id);
