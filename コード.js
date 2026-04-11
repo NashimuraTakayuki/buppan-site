@@ -1,20 +1,57 @@
 // ============================================================
-// 設定値（ここを編集するだけで全体に反映されます）
+// フォールバック設定値（スプレッドシートで管理できない場合のみ使用）
+// 通常はスプレッドシートの「システム設定」シートで管理してください
 // ============================================================
-const CONFIG = {
-  // LINE Login チャネル設定（LINE Developers Console > LINE Login チャネル）
+const CONFIG_DEFAULTS = {
   lineLogin: {
     channelId:     '2009555332',
     channelSecret: 'e33b101940df1867d28259321e2f4b8b',
     redirectUri:   'https://playful-dasik-759d42.netlify.app/',
   },
-
-  // デフォルトの通知先（スクール設定シートに該当スクールがない場合に使用）
   defaultNotification: {
     messagingApiToken: 'rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=',
     adminLineUserId:   'Ud97518e18c40d4de6d83537a7a05d6c1',
   },
 };
+
+// ============================================================
+// スプレッドシートの「システム設定」シートから設定を読み込む
+// シートがない場合や値が空の場合は CONFIG_DEFAULTS を使用
+// シート列構成: 設定キー | 値
+// ============================================================
+function getConfig() {
+  const config = JSON.parse(JSON.stringify(CONFIG_DEFAULTS)); // deep copy
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('システム設定');
+    if (!sheet) return config;
+    const rows = sheet.getDataRange().getValues();
+    const map = {};
+    rows.forEach(row => {
+      const key = String(row[0]).trim();
+      const val = String(row[1]).trim();
+      if (key && val) map[key] = val;
+    });
+    const ov = (path, obj) => {
+      const keys = path.split('.');
+      let cur = obj;
+      for (let i = 0; i < keys.length - 1; i++) cur = cur[keys[i]];
+      if (map[path]) cur[keys[keys.length - 1]] = map[path];
+    };
+    ov('lineLogin.channelId',                      config);
+    ov('lineLogin.channelSecret',                  config);
+    ov('lineLogin.redirectUri',                    config);
+    ov('defaultNotification.messagingApiToken',    config);
+    ov('defaultNotification.adminLineUserId',      config);
+  } catch (e) {
+    Logger.log('[getConfig] シート読み込みエラー（デフォルト値を使用）: ' + e.message);
+  }
+  return config;
+}
+
+// 後方互換: 既存コードが CONFIG.xxx を参照できるようエイリアスを提供
+// （各リクエストの先頭で呼ばれる doGet/doPost 内で上書きされる）
+let CONFIG = CONFIG_DEFAULTS;
 
 // ----------------------------------------------------
 // スプレッドシートへのログ記録ヘルパー
@@ -57,6 +94,7 @@ function writeLog(level, source, message) {
 // GET リクエスト：読み取り系APIエンドポイント
 // ----------------------------------------------------
 function doGet(e) {
+  CONFIG = getConfig(); // スプレッドシートから最新の設定を読み込む
   const action = e && e.parameter && e.parameter.action;
   let result;
   try {
@@ -88,6 +126,7 @@ function doGet(e) {
 // POST リクエスト：書き込み系 & LINE認証APIエンドポイント
 // ----------------------------------------------------
 function doPost(e) {
+  CONFIG = getConfig(); // スプレッドシートから最新の設定を読み込む
   let data;
   try {
     data = JSON.parse(e.postData.contents);
