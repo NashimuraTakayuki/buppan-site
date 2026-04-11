@@ -43,22 +43,16 @@ window.onload = async function () {
 
 	// --- アクセス元公式LINE識別子の取得（LIFFリンクに ?source=xxx を付与して使用）---
 	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
-	const _rawLiffState = params.get("liff.state") || "";
-	let _liffSourceStep = "(なし)";
 	lineSource = params.get("source") || "";
 	if (!lineSource) {
-		if (_rawLiffState) {
+		const liffState = params.get("liff.state");
+		if (liffState) {
 			try {
-				const decoded = decodeURIComponent(_rawLiffState);
+				const decoded = decodeURIComponent(liffState);
 				const liffParams = new URLSearchParams(decoded.replace(/^\?/, ""));
 				lineSource = liffParams.get("source") || "";
-				_liffSourceStep = "liff.state decoded: " + decoded;
-			} catch (e) {
-				_liffSourceStep = "decode error: " + e.message;
-			}
+			} catch (e) {}
 		}
-	} else {
-		_liffSourceStep = "直接 source パラメータから取得";
 	}
 	// LINE Login リダイレクト後も source を引き継ぐため localStorage に退避・復元する
 	if (lineSource) {
@@ -66,20 +60,6 @@ window.onload = async function () {
 	} else {
 		lineSource = localStorage.getItem("aslish_line_source") || "";
 	}
-
-	// --- デバッグ表示（画面右下に小さく表示）---
-	const _dbg = document.createElement("div");
-	_dbg.style.cssText = "position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.8);color:#0f0;font-size:10px;padding:6px 10px;z-index:9999;white-space:pre-wrap;word-break:break-all;max-height:40vh;overflow-y:auto;";
-	_dbg.textContent = [
-		"[DEBUG]",
-		"URL: " + window.location.href,
-		"liff.state(raw): " + (_rawLiffState || "(なし)"),
-		"source解析: " + _liffSourceStep,
-		"lineSource: " + (lineSource || "(空)"),
-		"localStorage source: " + (localStorage.getItem("aslish_line_source") || "(なし)"),
-		"isLineApp: " + isLineApp,
-	].join("\n");
-	document.body.appendChild(_dbg);
 
 	if (lineCode) {
 		try {
@@ -170,11 +150,6 @@ function initSchoolSelect(schools) {
 	// 優先順位: LocalStorage保存済み > lineSource(LIFFリンクのsourceパラメータ) > 未選択
 	const sourceCandidate = schools.includes(lineSource) ? lineSource : "";
 	const initialSchool = sourceCandidate || customerInfo.school;
-	// デバッグ情報を画面に追記
-	const _dbgEl = document.querySelector("div[style*='DEBUG']");
-	if (_dbgEl) {
-		_dbgEl.textContent += "\n[initSchoolSelect]\nschools: " + JSON.stringify(schools) + "\nsourceCandidate: " + (sourceCandidate || "(空)") + "\ninitialSchool: " + (initialSchool || "(空)");
-	}
 	schools.forEach((school) => {
 		const option = document.createElement("option");
 		option.value = school;
