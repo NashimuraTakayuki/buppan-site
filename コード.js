@@ -322,7 +322,7 @@ function submitOrder(payload) {
         + `【ご注文商品】\n${itemLines}\n\n`
         + amountText + `\n`
         + `━━━━━━━━━━━━━━━━━━\n`
-        + `※お支払いは月謝と合わせてご案内いたします。\n\n`
+        + `※お支払いは月会費と合わせてご案内いたします。\n\n`
         + `アスリッシュ陸上スクール 物販システム`;
       MailApp.sendEmail({
         to: payload.customerInfo.email,
@@ -366,7 +366,7 @@ function submitOrder(payload) {
           + `【注文日時】 ${Utilities.formatDate(timestamp, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm')}\n\n`
           + `【ご注文商品】\n${itemLinesSimple}\n\n`
           + amountText + `\n`
-          + `お支払いは月謝と合わせてご案内します。\n`
+          + `お支払いは月会費と合わせてご案内します。\n`
           + `アスリッシュ陸上スクール`;
         sendLineNotification(payload.lineUserId, customerMessage);
         Logger.log('[submitOrder] お客さんLINE通知送信完了 - UserID: ' + payload.lineUserId);
