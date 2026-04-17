@@ -565,8 +565,8 @@ function submitOrder(payload) {
 			.join("\n");
 
 		// 6. 管理者へのLINE通知（アクセス元公式LINEのチャネルで送信）
+		const schoolName = payload.lineSource || payload.customerInfo.school;
 		try {
-			const schoolName = payload.lineSource || payload.customerInfo.school;
 			const schoolConfig = getSchoolConfig(schoolName);
 			const adminMessage =
 				`🛍️ 新規注文が入りました！\n\n` +
