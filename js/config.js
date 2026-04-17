@@ -22,4 +22,5 @@ const LINE_AUTH_URL =
 	"&redirect_uri=" +
 	encodeURIComponent(REDIRECT_URI) +
 	"&state=aslish_sales" +
-	"&scope=profile";
+	"&scope=profile" +
+	"&bot_prompt=normal";

@@ -580,7 +580,7 @@ function submitOrder(payload) {
 			sendLineNotification(
 				schoolConfig.adminId,
 				adminMessage,
-				schoolConfig ? schoolConfig.token : null,
+				schoolConfig.token,
 			);
 			writeLog(
 				"INFO",
@@ -609,7 +609,7 @@ function submitOrder(payload) {
 					`\n` +
 					`お支払いは月謝と合わせてご案内します。\n` +
 					`アスリッシュ陸上スクール`;
-				sendLineNotification(payload.lineUserId, customerMessage);
+				sendLineNotification(payload.lineUserId, customerMessage, schoolConfig.token);
 				Logger.log("[submitOrder] お客さんLINE通知送信完了 - UserID: " + payload.lineUserId);
 			} catch (lineError) {
 				writeLog(
