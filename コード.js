@@ -566,8 +566,8 @@ function submitOrder(payload) {
 
 		// 6. 管理者へのLINE通知（アクセス元公式LINEのチャネルで送信）
 		const schoolName = payload.lineSource || payload.customerInfo.school;
+		const schoolConfig = getSchoolConfig(schoolName);
 		try {
-			const schoolConfig = getSchoolConfig(schoolName);
 			const adminMessage =
 				`🛍️ 新規注文が入りました！\n\n` +
 				`【注文ID】 ${orderId}\n` +
@@ -577,7 +577,11 @@ function submitOrder(payload) {
 				`【メール】 ${payload.customerInfo.email}\n\n` +
 				`【注文商品】\n${itemLinesSimple}\n\n` +
 				amountText;
-			sendLineNotification(schoolConfig.adminId, adminMessage, schoolConfig.token);
+			sendLineNotification(
+				schoolConfig.adminId,
+				adminMessage,
+				schoolConfig ? schoolConfig.token : null,
+			);
 			writeLog(
 				"INFO",
 				"submitOrder",
