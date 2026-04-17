@@ -24,8 +24,7 @@ function buildLineAuthUrl(channelId) {
 		encodeURIComponent(REDIRECT_URI) +
 		"&state=aslish_sales" +
 		"&scope=profile" +
-		"&bot_prompt=normal" +
-		"&prompt=consent"
+		"&bot_prompt=normal"
 	);
 }
 

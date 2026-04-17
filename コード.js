@@ -169,9 +169,11 @@ function getSchoolLoginConfig(schoolName) {
 		if (!sheet) return {};
 		const data = sheet.getDataRange().getValues();
 		const headers = data[0];
+		writeLog("INFO", "getSchoolLoginConfig", "[debug] headers=" + JSON.stringify(headers) + " / schoolName=" + schoolName);
 		const nameIdx = headers.indexOf("スクール名");
 		const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 		const channelSecretIdx = headers.indexOf("LINEログインチャンネルシークレット");
+		writeLog("INFO", "getSchoolLoginConfig", "[debug] nameIdx=" + nameIdx + " / channelIdIdx=" + channelIdIdx + " / channelSecretIdx=" + channelSecretIdx);
 		if (nameIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
 		for (let i = 1; i < data.length; i++) {
 			if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
@@ -194,6 +196,7 @@ function getLineUserIdFromCode(code, schoolName) {
 	const CHANNEL_ID = loginConfig.channelId || CONFIG.lineLogin.channelId;
 	const CHANNEL_SECRET = loginConfig.channelSecret || CONFIG.lineLogin.channelSecret;
 	const REDIRECT_URI = CONFIG.lineLogin.redirectUri;
+	writeLog("INFO", "getLineUserIdFromCode", "[debug] schoolName=" + schoolName + " / channelId=" + CHANNEL_ID + " / loginConfig.channelId=" + (loginConfig.channelId || "なし"));
 
 	// アクセストークン取得
 	const tokenRes = UrlFetchApp.fetch("https://api.line.me/oauth2/v2.1/token", {
