@@ -566,7 +566,6 @@ function submitOrder(payload) {
 
 		// 6. 管理者へのLINE通知（アクセス元公式LINEのチャネルで送信）
 		const schoolName = payload.lineSource || payload.customerInfo.school;
-		console.log(schoolName);
 		try {
 			const schoolConfig = getSchoolConfig(schoolName);
 			const adminMessage =
