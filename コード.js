@@ -144,7 +144,7 @@ function doPost(e) {
 				result = submitOrder(data.payload);
 				break;
 			case "exchangeLineCode":
-				result = { userId: getLineUserIdFromCode(data.code) };
+				result = { userId: getLineUserIdFromCode(data.code, data.schoolName || "") };
 				break;
 			default:
 				result = { error: "Unknown action: " + action };
@@ -159,11 +159,40 @@ function doPost(e) {
 }
 
 // ----------------------------------------------------
+// スクールごとのLINEログインチャンネル設定を取得
+// スクール設定シートの列: LINEログインチャンネルID | LINEログインチャンネルシークレット
+// ----------------------------------------------------
+function getSchoolLoginConfig(schoolName) {
+	try {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
+		const sheet = ss.getSheetByName("スクール設定");
+		if (!sheet) return {};
+		const data = sheet.getDataRange().getValues();
+		const headers = data[0];
+		const nameIdx = headers.indexOf("スクール名");
+		const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
+		const channelSecretIdx = headers.indexOf("LINEログインチャンネルシークレット");
+		if (nameIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
+		for (let i = 1; i < data.length; i++) {
+			if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
+				const channelId = String(data[i][channelIdIdx]).trim();
+				const channelSecret = String(data[i][channelSecretIdx]).trim();
+				if (channelId && channelSecret) return { channelId, channelSecret };
+			}
+		}
+	} catch (e) {
+		writeLog("ERROR", "getSchoolLoginConfig", e.message);
+	}
+	return {};
+}
+
+// ----------------------------------------------------
 // LINE Login OAuthコードをユーザーIDに交換
 // ----------------------------------------------------
-function getLineUserIdFromCode(code) {
-	const CHANNEL_ID = CONFIG.lineLogin.channelId;
-	const CHANNEL_SECRET = CONFIG.lineLogin.channelSecret;
+function getLineUserIdFromCode(code, schoolName) {
+	const loginConfig = schoolName ? getSchoolLoginConfig(schoolName) : {};
+	const CHANNEL_ID = loginConfig.channelId || CONFIG.lineLogin.channelId;
+	const CHANNEL_SECRET = loginConfig.channelSecret || CONFIG.lineLogin.channelSecret;
 	const REDIRECT_URI = CONFIG.lineLogin.redirectUri;
 
 	// アクセストークン取得
@@ -219,14 +248,18 @@ function getSchoolList() {
 	if (data.length <= 1) return [];
 	const headers = data[0];
 	const nameIdx = headers.indexOf("スクール名");
+	const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 	if (nameIdx === -1) {
 		writeLog("ERROR", "getSchoolList", "スクール設定シートに「スクール名」列が見つかりません");
 		return [];
 	}
 	const schools = data
 		.slice(1)
-		.map((row) => String(row[nameIdx]).trim())
-		.filter((s) => s.length > 0);
+		.filter((row) => String(row[nameIdx]).trim().length > 0)
+		.map((row) => ({
+			name: String(row[nameIdx]).trim(),
+			lineChannelId: channelIdIdx !== -1 ? String(row[channelIdIdx]).trim() : "",
+		}));
 	Logger.log("[getSchoolList] スクール数: " + schools.length);
 	return schools;
 }

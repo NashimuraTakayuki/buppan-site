@@ -61,9 +61,18 @@ window.onload = async function () {
 		lineSource = localStorage.getItem("aslish_line_source") || "";
 	}
 
+	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
+	let schoolData = [];
+	try {
+		schoolData = await gasGet("getSchoolList");
+	} catch (e) {
+		document.getElementById("loading").innerText = "エラー: スクール情報の取得に失敗しました";
+	}
+
 	if (lineCode) {
 		try {
-			const data = await gasPost("exchangeLineCode", { code: lineCode });
+			// スクール名を渡してGAS側で正しいチャンネルのシークレットを使って交換
+			const data = await gasPost("exchangeLineCode", { code: lineCode, schoolName: lineSource });
 			lineUserId = data.userId || "";
 		} catch (e) {
 			console.error("LINE code exchange failed:", e);
@@ -81,45 +90,40 @@ window.onload = async function () {
 			.then(prefillCustomerInfo)
 			.catch(() => {});
 	} else if (isLineApp) {
-		// LINE アプリ内でアクセスしていて未連携なら認証へリダイレクト
-		window.location.href = LINE_AUTH_URL;
+		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
+		const schoolEntry = schoolData.find((s) => s.name === lineSource);
+		const channelId =
+			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
+		window.location.href = buildLineAuthUrl(channelId);
 		return;
 	}
 
-	// --- スクール一覧を取得してログイン画面を表示 ---
-	gasGet("getSchoolList")
-		.then((schools) => {
-			document.getElementById("loading").style.display = "none";
-			document.getElementById("login-view").style.display = "block";
-			initSchoolSelect(schools);
+	// --- ログイン画面を表示（スクール一覧は取得済み）---
+	document.getElementById("loading").style.display = "none";
+	document.getElementById("login-view").style.display = "block";
+	initSchoolSelect(schoolData);
 
-			// ログイン画面表示後、バックグラウンドで商品データ・割引率を並行取得
-			gasGet("getProductAndInventoryData")
-				.then((products) => {
-					globalProducts = products;
-					isProductLoaded = true;
-					// すでに商品一覧画面にいる場合は即描画
-					if (document.getElementById("product-list-view").style.display === "block") {
-						initData();
-						updateCartUI();
-					}
-				})
-				.catch((err) => console.error("商品取得エラー:", err));
+	// バックグラウンドで商品データ・割引率を並行取得
+	gasGet("getProductAndInventoryData")
+		.then((products) => {
+			globalProducts = products;
+			isProductLoaded = true;
+			if (document.getElementById("product-list-view").style.display === "block") {
+				initData();
+				updateCartUI();
+			}
+		})
+		.catch((err) => console.error("商品取得エラー:", err));
 
-			// 会員特典割引率をバックグラウンドで取得（LINE連携時のカート合計に使用）
-			fetchMemberDiscountRate()
-				.then((rate) => {
-					memberDiscountRate = rate;
-					if (lineUserId && statusEl) {
-						statusEl.textContent = "✓ LINEアカウント連携済み (会員特典: " + rate + "%OFF)";
-					}
-				})
-				.catch(() => {
-					memberDiscountRate = 0;
-				});
+	fetchMemberDiscountRate()
+		.then((rate) => {
+			memberDiscountRate = rate;
+			if (lineUserId && statusEl) {
+				statusEl.textContent = "✓ LINEアカウント連携済み (会員特典: " + rate + "%OFF)";
+			}
 		})
 		.catch(() => {
-			document.getElementById("loading").innerText = "エラー: スクール情報の取得に失敗しました";
+			memberDiscountRate = 0;
 		});
 
 	// --- バリデーションイベントの一括登録 ---
@@ -146,15 +150,17 @@ function initSchoolSelect(schools) {
 		select.innerHTML = '<option value="">スクール一覧の取得に失敗しました</option>';
 		return;
 	}
+	// {name, lineChannelId} 形式と後方互換のため文字列にも対応
+	const schoolNames = schools.map((s) => (typeof s === "string" ? s : s.name));
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
 	// 優先順位: LocalStorage保存済み > lineSource(LIFFリンクのsourceパラメータ) > 未選択
-	const sourceCandidate = schools.includes(lineSource) ? lineSource : "";
+	const sourceCandidate = schoolNames.includes(lineSource) ? lineSource : "";
 	const initialSchool = sourceCandidate || customerInfo.school;
-	schools.forEach((school) => {
+	schoolNames.forEach((name) => {
 		const option = document.createElement("option");
-		option.value = school;
-		option.textContent = school;
-		if (initialSchool === school) option.selected = true;
+		option.value = name;
+		option.textContent = name;
+		if (initialSchool === name) option.selected = true;
 		select.appendChild(option);
 	});
 	if (!customerInfo.school && sourceCandidate) {
