@@ -169,11 +169,24 @@ function getSchoolLoginConfig(schoolName) {
 		if (!sheet) return {};
 		const data = sheet.getDataRange().getValues();
 		const headers = data[0];
-		writeLog("INFO", "getSchoolLoginConfig", "[debug] headers=" + JSON.stringify(headers) + " / schoolName=" + schoolName);
+		writeLog(
+			"INFO",
+			"getSchoolLoginConfig",
+			"[debug] headers=" + JSON.stringify(headers) + " / schoolName=" + schoolName,
+		);
 		const nameIdx = headers.indexOf("スクール名");
 		const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 		const channelSecretIdx = headers.indexOf("LINEログインチャンネルシークレット");
-		writeLog("INFO", "getSchoolLoginConfig", "[debug] nameIdx=" + nameIdx + " / channelIdIdx=" + channelIdIdx + " / channelSecretIdx=" + channelSecretIdx);
+		writeLog(
+			"INFO",
+			"getSchoolLoginConfig",
+			"[debug] nameIdx=" +
+				nameIdx +
+				" / channelIdIdx=" +
+				channelIdIdx +
+				" / channelSecretIdx=" +
+				channelSecretIdx,
+		);
 		if (nameIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
 		for (let i = 1; i < data.length; i++) {
 			if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
@@ -196,7 +209,16 @@ function getLineUserIdFromCode(code, schoolName) {
 	const CHANNEL_ID = loginConfig.channelId || CONFIG.lineLogin.channelId;
 	const CHANNEL_SECRET = loginConfig.channelSecret || CONFIG.lineLogin.channelSecret;
 	const REDIRECT_URI = CONFIG.lineLogin.redirectUri;
-	writeLog("INFO", "getLineUserIdFromCode", "[debug] schoolName=" + schoolName + " / channelId=" + CHANNEL_ID + " / loginConfig.channelId=" + (loginConfig.channelId || "なし"));
+	writeLog(
+		"INFO",
+		"getLineUserIdFromCode",
+		"[debug] schoolName=" +
+			schoolName +
+			" / channelId=" +
+			CHANNEL_ID +
+			" / loginConfig.channelId=" +
+			(loginConfig.channelId || "なし"),
+	);
 
 	// アクセストークン取得
 	const tokenRes = UrlFetchApp.fetch("https://api.line.me/oauth2/v2.1/token", {
@@ -577,7 +599,7 @@ function submitOrder(payload) {
 				`\n` +
 				`━━━━━━━━━━━━━━━━━━\n` +
 				`※お支払いは月会費と合わせてご案内いたします。\n\n` +
-				`アスリッシュ陸上スクール 物販システム`;
+				`アスリッシュ陸上スクール`;
 			MailApp.sendEmail({
 				to: payload.customerInfo.email,
 				subject: `【アスリッシュ物販】ご注文受付のお知らせ（注文ID: ${orderId}）`,
@@ -613,11 +635,7 @@ function submitOrder(payload) {
 				`【メール】 ${payload.customerInfo.email}\n\n` +
 				`【注文商品】\n${itemLinesSimple}\n\n` +
 				amountText;
-			sendLineNotification(
-				schoolConfig.adminId,
-				adminMessage,
-				schoolConfig.token,
-			);
+			sendLineNotification(schoolConfig.adminId, adminMessage, schoolConfig.token);
 			writeLog(
 				"INFO",
 				"submitOrder",
