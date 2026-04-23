@@ -215,6 +215,8 @@ function initData() {
 // ============================================================
 // カテゴリタブの描画
 // ============================================================
+const CATEGORY_ORDER = ["すべて", "全世代", "低学年向け", "高学年向け", "中学生向け"];
+
 function renderCategoryTabs() {
 	const tabContainer = document.getElementById("category-tabs");
 	tabContainer.innerHTML = "";
@@ -230,6 +232,15 @@ function renderCategoryTabs() {
 				if (!categories.includes(cat)) categories.push(cat);
 			});
 		}
+	});
+	// 指定順にソート（CATEGORY_ORDERにないカテゴリーは末尾）
+	categories.sort((a, b) => {
+		const ai = CATEGORY_ORDER.indexOf(a);
+		const bi = CATEGORY_ORDER.indexOf(b);
+		if (ai === -1 && bi === -1) return 0;
+		if (ai === -1) return 1;
+		if (bi === -1) return -1;
+		return ai - bi;
 	});
 	categories.forEach((cat) => {
 		const tab = document.createElement("div");
