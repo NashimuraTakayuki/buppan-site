@@ -181,7 +181,7 @@ function initData() {
 // ============================================================
 // カテゴリタブの描画
 // ============================================================
-const CATEGORY_ORDER = ["すべて", "全世代", "低学年向け", "高学年向け", "中学生向け"];
+const CATEGORY_ORDER = ["すべて", "低学年", "高学年", "中学生", "大人"];
 
 function renderCategoryTabs() {
 	const tabContainer = document.getElementById("category-tabs");
