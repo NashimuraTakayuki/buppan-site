@@ -4,8 +4,8 @@
 // ============================================================
 const CONFIG_DEFAULTS = {
 	lineLogin: {
-		channelId: "2009598478",
-		channelSecret: "e33b101940df1867d28259321e2f4b8b",
+		channelId: "2009818388",
+		channelSecret: "6ed3d4dad5547ffbbaad7f90a9be9844",
 		redirectUri: "https://buppan-site.weathered-hill-1bba.workers.dev/",
 	},
 	defaultNotification: {
@@ -1160,140 +1160,7 @@ function onOpen() {
 		.addItem("SKUを在庫シートに自動展開", "generateSKUs")
 		.addSeparator()
 		.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
-		.addSeparator()
-		.addItem("🔧 スクールIDを採番＆URL更新（移行用）", "migrateAddSchoolIds")
 		.addToUi();
-}
-
-// ----------------------------------------------------
-// 【移行用 / 1回実行】スクール設定シートにスクールID列を追加し、
-// 既存行に s001, s002... を採番。さらにリッチメニューURLの
-// ?source= の値をスクールIDに置き換える。
-// 何度実行しても安全（idempotent）。
-// ----------------------------------------------------
-function migrateAddSchoolIds() {
-	const ss = SpreadsheetApp.getActiveSpreadsheet();
-	const sheet = ss.getSheetByName("スクール設定");
-	if (!sheet) {
-		const msg = "スクール設定シートが見つかりません";
-		writeLog("ERROR", "migrateAddSchoolIds", msg);
-		return { success: false, message: msg };
-	}
-
-	const lastCol = sheet.getLastColumn();
-	let headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-	let idIdx = headers.indexOf("スクールID");
-
-	// 1. スクールID列がなければ末尾に追加
-	if (idIdx === -1) {
-		const newColNum = lastCol + 1;
-		sheet.getRange(1, newColNum).setValue("スクールID");
-		sheet.getRange(1, newColNum).setFontWeight("bold").setBackground("#f3f4f6");
-		writeLog("INFO", "migrateAddSchoolIds", "スクールID列を追加（列番号: " + newColNum + "）");
-		// 再読み込み
-		headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-		idIdx = headers.indexOf("スクールID");
-	}
-
-	const nameIdx = headers.indexOf("スクール名");
-	const urlIdx = headers.indexOf("リッチメニューに追加するURL");
-	if (nameIdx === -1) {
-		const msg = "「スクール名」列が見つかりません";
-		writeLog("ERROR", "migrateAddSchoolIds", msg);
-		return { success: false, message: msg };
-	}
-
-	const lastRow = sheet.getLastRow();
-	if (lastRow < 2) {
-		return { success: true, message: "データ行がありません", assigned: 0 };
-	}
-
-	const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-
-	// 既存IDの最大値を取得
-	let maxNum = 0;
-	data.forEach((row) => {
-		const m = String(row[idIdx] || "").match(/^s(\d+)$/);
-		if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
-	});
-
-	let assignedCount = 0;
-	let urlUpdatedCount = 0;
-
-	for (let i = 0; i < data.length; i++) {
-		const row = data[i];
-		const name = String(row[nameIdx] || "").trim();
-		if (!name) continue; // 空行はスキップ
-
-		// IDの採番
-		let id = String(row[idIdx] || "").trim();
-		if (!id || !/^s\d+$/.test(id)) {
-			maxNum++;
-			id = "s" + String(maxNum).padStart(3, "0");
-			sheet.getRange(i + 2, idIdx + 1).setValue(id);
-			assignedCount++;
-			writeLog("INFO", "migrateAddSchoolIds", "ID採番: " + name + " → " + id);
-		}
-
-		// URLの ?source= をIDに置き換え
-		if (urlIdx !== -1) {
-			const url = String(row[urlIdx] || "").trim();
-			if (url) {
-				const newUrl = replaceSourceParam(url, id);
-				if (newUrl !== url) {
-					sheet.getRange(i + 2, urlIdx + 1).setValue(newUrl);
-					urlUpdatedCount++;
-					writeLog("INFO", "migrateAddSchoolIds", "URL更新: " + name + " → " + newUrl);
-				}
-			}
-		}
-	}
-
-	const summary = "完了: ID採番 " + assignedCount + "件 / URL更新 " + urlUpdatedCount + "件";
-	writeLog("INFO", "migrateAddSchoolIds", summary);
-
-	// UIから呼ばれた場合のみアラート表示
-	try {
-		SpreadsheetApp.getUi().alert(summary);
-	} catch (e) {
-		// run_script_function 等から呼ばれた場合はUIなし
-	}
-
-	return {
-		success: true,
-		message: summary,
-		assigned: assignedCount,
-		urlUpdated: urlUpdatedCount,
-	};
-}
-
-// URLの ?source= パラメータを newSource に置き換える
-// source= が無ければ末尾に追加する
-function replaceSourceParam(url, newSource) {
-	const encoded = encodeURIComponent(newSource);
-	const qIdx = url.indexOf("?");
-	if (qIdx === -1) {
-		return url + "?source=" + encoded;
-	}
-	const base = url.substring(0, qIdx);
-	const query = url.substring(qIdx + 1);
-	const params = query.split("&").filter(function (p) {
-		return p.length > 0;
-	});
-	let foundSource = false;
-	const newParams = params.map(function (p) {
-		const eqIdx = p.indexOf("=");
-		const key = eqIdx === -1 ? p : p.substring(0, eqIdx);
-		if (key === "source") {
-			foundSource = true;
-			return "source=" + encoded;
-		}
-		return p;
-	});
-	if (!foundSource) {
-		newParams.push("source=" + encoded);
-	}
-	return base + "?" + newParams.join("&");
 }
 
 // ----------------------------------------------------
