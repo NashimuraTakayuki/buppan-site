@@ -92,7 +92,7 @@ window.onload = async function () {
 			.catch(() => {});
 	} else if (isLineApp) {
 		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
-		const schoolEntry = (schoolData || []).find((s) => s && s.id === lineSource);
+		const schoolEntry = (schoolData || []).find((s) => s && (s.id === lineSource || s.name === lineSource));
 		const channelId =
 			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
 		window.location.href = buildLineAuthUrl(channelId);
@@ -164,9 +164,15 @@ function initSchoolSelect(schools) {
 
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
 
-	// lineSource はスクールID。一致するスクールを探して、その「名前」を初期選択にする
-	const sourceMatch = lineSource ? normalized.find((s) => s.id === lineSource) : null;
+	// lineSource はスクールID（または移行前のスクール名）。一致するスクールを探して、その「名前」を初期選択にする
+	const sourceMatch = lineSource ? normalized.find((s) => s.id === lineSource || s.name === lineSource) : null;
 	const sourceName = sourceMatch ? sourceMatch.name : "";
+
+	// 名前でマッチした場合、lineSource を正規のID（s00X）で上書き（標準化）
+	if (sourceMatch && lineSource !== sourceMatch.id) {
+		lineSource = sourceMatch.id;
+		localStorage.setItem("aslish_line_source", lineSource);
+	}
 
 	// 優先順位: LIFFリンクのsource（=スクールID）から解決した名前 > LocalStorageの school 名 > 未選択
 	const initialSchool = sourceName || customerInfo.school;
