@@ -95,6 +95,7 @@ window.onload = async function () {
 		const schoolEntry = (schoolData || []).find((s) => s && s.id === lineSource);
 		const channelId =
 			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
+		alert("Debug channelId: " + channelId);
 		window.location.href = buildLineAuthUrl(channelId);
 		return;
 	}

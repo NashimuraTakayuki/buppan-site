@@ -4,7 +4,7 @@
 // ============================================================
 const CONFIG_DEFAULTS = {
 	lineLogin: {
-		channelId: "2009555332",
+		channelId: "2009598478",
 		channelSecret: "e33b101940df1867d28259321e2f4b8b",
 		redirectUri: "https://buppan-site.weathered-hill-1bba.workers.dev/",
 	},
@@ -1104,16 +1104,16 @@ function handleSchoolSettingEdit(e) {
 			if (liffBase) {
 				const newUrl = liffBase + "?source=" + encodeURIComponent(currentId);
 				sheet.getRange(editedRow, urlIdx + 1).setValue(newUrl);
-				writeLog(
-					"INFO",
-					"handleSchoolSettingEdit",
-					"URL自動生成: 行" + editedRow + " → " + newUrl,
-				);
+				writeLog("INFO", "handleSchoolSettingEdit", "URL自動生成: 行" + editedRow + " → " + newUrl);
 			} else {
 				writeLog(
 					"WARN",
 					"handleSchoolSettingEdit",
-					"行" + editedRow + ": チャンネルID " + channelId + " のLIFF URLサンプルが見つからず、URL自動生成をスキップ",
+					"行" +
+						editedRow +
+						": チャンネルID " +
+						channelId +
+						" のLIFF URLサンプルが見つからず、URL自動生成をスキップ",
 				);
 			}
 		}
@@ -1188,10 +1188,7 @@ function migrateAddSchoolIds() {
 	if (idIdx === -1) {
 		const newColNum = lastCol + 1;
 		sheet.getRange(1, newColNum).setValue("スクールID");
-		sheet
-			.getRange(1, newColNum)
-			.setFontWeight("bold")
-			.setBackground("#f3f4f6");
+		sheet.getRange(1, newColNum).setFontWeight("bold").setBackground("#f3f4f6");
 		writeLog("INFO", "migrateAddSchoolIds", "スクールID列を追加（列番号: " + newColNum + "）");
 		// 再読み込み
 		headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -1252,8 +1249,7 @@ function migrateAddSchoolIds() {
 		}
 	}
 
-	const summary =
-		"完了: ID採番 " + assignedCount + "件 / URL更新 " + urlUpdatedCount + "件";
+	const summary = "完了: ID採番 " + assignedCount + "件 / URL更新 " + urlUpdatedCount + "件";
 	writeLog("INFO", "migrateAddSchoolIds", summary);
 
 	// UIから呼ばれた場合のみアラート表示
