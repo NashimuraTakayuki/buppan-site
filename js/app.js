@@ -74,9 +74,14 @@ window.onload = async function () {
 		try {
 			// スクールIDを渡してGAS側で正しいチャンネルのシークレットを使って交換
 			const data = await gasPost("exchangeLineCode", { code: lineCode, schoolId: lineSource });
-			lineUserId = data.userId || "";
+			if (data.error) {
+				alert("LINE Login Error: " + data.error);
+			} else {
+				lineUserId = data.userId || "";
+			}
 		} catch (e) {
 			console.error("LINE code exchange failed:", e);
+			alert("LINE code exchange failed: " + e.message);
 		}
 		// URL から code を除去
 		history.replaceState({}, "", window.location.pathname);
@@ -90,8 +95,9 @@ window.onload = async function () {
 		gasGet("getCustomerInfoByLineId", { lineUserId })
 			.then(prefillCustomerInfo)
 			.catch(() => {});
-	} else if (isLineApp) {
+	} else if (isLineApp && !lineCode) {
 		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
+		// 無限ループを防ぐため、code がある（認証から戻ってきた）場合はリダイレクトしない
 		const schoolEntry = (schoolData || []).find((s) => s && (s.id === lineSource || s.name === lineSource));
 		const channelId =
 			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
