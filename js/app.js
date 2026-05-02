@@ -70,6 +70,15 @@ window.onload = async function () {
 		document.getElementById("loading").innerText = "エラー: スクール情報の取得に失敗しました";
 	}
 
+	// URLパラメータが移行前の「スクール名」だった場合、正規の「スクールID」に変換しておく
+	if (lineSource) {
+		const match = schoolData.find((s) => s.id === lineSource || s.name === lineSource);
+		if (match && match.id && lineSource !== match.id) {
+			lineSource = match.id;
+			localStorage.setItem("aslish_line_source", lineSource);
+		}
+	}
+
 	if (lineCode) {
 		try {
 			// スクールIDを渡してGAS側で正しいチャンネルのシークレットを使って交換
