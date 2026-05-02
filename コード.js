@@ -144,7 +144,10 @@ function doPost(e) {
 				result = submitOrder(data.payload);
 				break;
 			case "exchangeLineCode":
-				result = { userId: getLineUserIdFromCode(data.code, data.schoolName || "") };
+				// schoolId を優先。後方互換のため schoolName が来た場合も受ける（IDとして扱う）
+				result = {
+					userId: getLineUserIdFromCode(data.code, data.schoolId || data.schoolName || ""),
+				};
 				break;
 			default:
 				result = { error: "Unknown action: " + action };
@@ -160,9 +163,10 @@ function doPost(e) {
 
 // ----------------------------------------------------
 // スクールごとのLINEログインチャンネル設定を取得
-// スクール設定シートの列: LINEログインチャンネルID | LINEログインチャンネルシークレット
+// 引数: schoolId（スクールID。空文字なら何もせずに空オブジェクトを返す）
+// スクール設定シートの列: スクールID | LINEログインチャンネルID | LINEログインチャンネルシークレット
 // ----------------------------------------------------
-function getSchoolLoginConfig(schoolName) {
+function getSchoolLoginConfig(schoolId) {
 	try {
 		const ss = SpreadsheetApp.getActiveSpreadsheet();
 		const sheet = ss.getSheetByName("スクール設定");
@@ -172,24 +176,26 @@ function getSchoolLoginConfig(schoolName) {
 		writeLog(
 			"INFO",
 			"getSchoolLoginConfig",
-			"[debug] headers=" + JSON.stringify(headers) + " / schoolName=" + schoolName,
+			"[debug] headers=" + JSON.stringify(headers) + " / schoolId=" + schoolId,
 		);
-		const nameIdx = headers.indexOf("スクール名");
+		const idIdx = headers.indexOf("スクールID");
 		const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 		const channelSecretIdx = headers.indexOf("LINEログインチャンネルシークレット");
 		writeLog(
 			"INFO",
 			"getSchoolLoginConfig",
-			"[debug] nameIdx=" +
-				nameIdx +
+			"[debug] idIdx=" +
+				idIdx +
 				" / channelIdIdx=" +
 				channelIdIdx +
 				" / channelSecretIdx=" +
 				channelSecretIdx,
 		);
-		if (nameIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
+		if (idIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
+		const target = String(schoolId || "").trim();
+		if (!target) return {};
 		for (let i = 1; i < data.length; i++) {
-			if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
+			if (String(data[i][idIdx]).trim() === target) {
 				const channelId = String(data[i][channelIdIdx]).trim();
 				const channelSecret = String(data[i][channelSecretIdx]).trim();
 				if (channelId && channelSecret) return { channelId, channelSecret };
@@ -203,17 +209,18 @@ function getSchoolLoginConfig(schoolName) {
 
 // ----------------------------------------------------
 // LINE Login OAuthコードをユーザーIDに交換
+// 引数: code, schoolId（スクールID。空ならデフォルトのチャンネル設定を使用）
 // ----------------------------------------------------
-function getLineUserIdFromCode(code, schoolName) {
-	const loginConfig = schoolName ? getSchoolLoginConfig(schoolName) : {};
+function getLineUserIdFromCode(code, schoolId) {
+	const loginConfig = schoolId ? getSchoolLoginConfig(schoolId) : {};
 	const CHANNEL_ID = loginConfig.channelId || CONFIG.lineLogin.channelId;
 	const CHANNEL_SECRET = loginConfig.channelSecret || CONFIG.lineLogin.channelSecret;
 	const REDIRECT_URI = CONFIG.lineLogin.redirectUri;
 	writeLog(
 		"INFO",
 		"getLineUserIdFromCode",
-		"[debug] schoolName=" +
-			schoolName +
+		"[debug] schoolId=" +
+			schoolId +
 			" / channelId=" +
 			CHANNEL_ID +
 			" / loginConfig.channelId=" +
@@ -260,6 +267,7 @@ function getLineUserIdFromCode(code, schoolName) {
 
 // ----------------------------------------------------
 // スクール一覧をフロントエンドに渡す関数（スクール設定シートから取得）
+// 返却フォーマット: [{ id, name, lineChannelId }, ...]
 // ----------------------------------------------------
 function getSchoolList() {
 	Logger.log("[getSchoolList] 開始");
@@ -273,6 +281,7 @@ function getSchoolList() {
 	if (data.length <= 1) return [];
 	const headers = data[0];
 	const nameIdx = headers.indexOf("スクール名");
+	const idIdx = headers.indexOf("スクールID");
 	const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 	if (nameIdx === -1) {
 		writeLog("ERROR", "getSchoolList", "スクール設定シートに「スクール名」列が見つかりません");
@@ -282,6 +291,7 @@ function getSchoolList() {
 		.slice(1)
 		.filter((row) => String(row[nameIdx]).trim().length > 0)
 		.map((row) => ({
+			id: idIdx !== -1 ? String(row[idIdx]).trim() : "",
 			name: String(row[nameIdx]).trim(),
 			lineChannelId: channelIdIdx !== -1 ? String(row[channelIdIdx]).trim() : "",
 		}));
@@ -384,7 +394,9 @@ function submitOrder(payload) {
 		"開始 - メール: " +
 			payload.customerInfo.email +
 			" / スクール: " +
-			(payload.lineSource || payload.customerInfo.school) +
+			payload.customerInfo.school +
+			" / スクールID: " +
+			(payload.lineSource || "(なし)") +
 			" / カート商品数: " +
 			payload.cart.length,
 	);
@@ -623,8 +635,9 @@ function submitOrder(payload) {
 			.join("\n");
 
 		// 6. 管理者へのLINE通知（アクセス元公式LINEのチャネルで送信）
-		const schoolName = payload.lineSource || payload.customerInfo.school;
-		const schoolConfig = getSchoolConfig(schoolName);
+		// スクールID（payload.lineSource）優先で設定検索、なければスクール名で検索
+		const schoolIdentifier = payload.lineSource || payload.customerInfo.school;
+		const schoolConfig = getSchoolConfig(schoolIdentifier);
 		try {
 			const adminMessage =
 				`🛍️ 新規注文が入りました！\n\n` +
@@ -639,13 +652,19 @@ function submitOrder(payload) {
 			writeLog(
 				"INFO",
 				"submitOrder",
-				"管理者LINE通知送信完了 - スクール: " + schoolName + " / adminId: " + schoolConfig.adminId,
+				"管理者LINE通知送信完了 - 検索キー: " +
+					schoolIdentifier +
+					" / adminId: " +
+					schoolConfig.adminId,
 			);
 		} catch (lineError) {
 			writeLog(
 				"ERROR",
 				"submitOrder",
-				"管理者LINE通知エラー（注文は完了） - スクール: " + schoolName + " / " + lineError.message,
+				"管理者LINE通知エラー（注文は完了） - 検索キー: " +
+					schoolIdentifier +
+					" / " +
+					lineError.message,
 			);
 		}
 
@@ -888,9 +907,11 @@ function upsertCustomerInfo(ss, lineUserId, customerInfo) {
 
 // ----------------------------------------------------
 // スクール設定の取得（スクール設定シートを参照）
-// スクール設定シートの列: スクール名 | Messaging_API_Token | 管理者LINE_UserID
+// 引数: identifier（スクールIDまたはスクール名のいずれか）
+// 検索順: スクールID列 → スクール名列（フォールバック）
+// スクール設定シートの列: スクールID | スクール名 | Messaging_API_Token | 管理者LINE_UserID
 // ----------------------------------------------------
-function getSchoolConfig(schoolName) {
+function getSchoolConfig(identifier) {
 	const DEFAULT_TOKEN = CONFIG.defaultNotification.messagingApiToken;
 	const DEFAULT_ADMIN_ID = CONFIG.defaultNotification.adminLineUserId;
 
@@ -908,6 +929,7 @@ function getSchoolConfig(schoolName) {
 		if (data.length <= 1) return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
 
 		const headers = data[0];
+		const idIdx = headers.indexOf("スクールID");
 		const nameIdx = headers.indexOf("スクール名");
 		const tokenIdx = headers.indexOf("Messaging_API_Token");
 		const adminIdx = headers.indexOf("管理者LINE_UserID");
@@ -919,13 +941,36 @@ function getSchoolConfig(schoolName) {
 			return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
 		}
 
+		const target = String(identifier || "").trim();
+		if (!target) return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
+
+		const matchRow = (i) => {
+			const token = String(data[i][tokenIdx]).trim();
+			const adminId = String(data[i][adminIdx]).trim();
+			if (token && adminId) return { token, adminId };
+			return null;
+		};
+
+		// 1. まず スクールID 列で検索
+		if (idIdx !== -1) {
+			for (let i = 1; i < data.length; i++) {
+				if (String(data[i][idIdx]).trim() === target) {
+					const result = matchRow(i);
+					if (result) {
+						Logger.log("[getSchoolConfig] スクールID「" + target + "」の設定を取得しました。");
+						return result;
+					}
+				}
+			}
+		}
+
+		// 2. スクール名 列にフォールバック（顧客情報のスクール名で検索する場合）
 		for (let i = 1; i < data.length; i++) {
-			if (String(data[i][nameIdx]).trim() === String(schoolName).trim()) {
-				const token = String(data[i][tokenIdx]).trim();
-				const adminId = String(data[i][adminIdx]).trim();
-				if (token && adminId) {
-					Logger.log("[getSchoolConfig] スクール「" + schoolName + "」の設定を取得しました。");
-					return { token: token, adminId: adminId };
+			if (String(data[i][nameIdx]).trim() === target) {
+				const result = matchRow(i);
+				if (result) {
+					Logger.log("[getSchoolConfig] スクール名「" + target + "」の設定を取得しました。");
+					return result;
 				}
 			}
 		}
@@ -933,7 +978,7 @@ function getSchoolConfig(schoolName) {
 		writeLog(
 			"WARN",
 			"getSchoolConfig",
-			"スクール「" + schoolName + "」の設定が見つかりません。デフォルト設定を使用します。",
+			"スクール「" + target + "」の設定が見つかりません。デフォルト設定を使用します。",
 		);
 		return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
 	} catch (e) {
@@ -974,6 +1019,7 @@ function sendLineNotification(userId, message, token) {
 
 // ----------------------------------------------------
 // 在庫数の手動編集を検知して変更履歴を記録、およびSKU自動展開（シンプルトリガー）
+// スクール設定シートではスクールID自動採番とURL自動生成も行う
 // ----------------------------------------------------
 function onEdit(e) {
 	if (!e || !e.range) return;
@@ -985,6 +1031,14 @@ function onEdit(e) {
 		if (e.range.getRow() > 1) {
 			// ヘッダー行以外の編集なら
 			generateSKUs(true);
+		}
+		return;
+	}
+
+	// スクール設定シートの編集 → IDの自動採番 & URLの自動生成
+	if (sheetName === "スクール設定") {
+		if (e.range.getRow() > 1) {
+			handleSchoolSettingEdit(e);
 		}
 		return;
 	}
@@ -1008,6 +1062,96 @@ function onEdit(e) {
 }
 
 // ----------------------------------------------------
+// スクール設定シートの編集ハンドラ
+// - スクール名が入力されていてスクールIDが空なら、連番（s001, s002, ...）でIDを自動採番
+// - LINEログインチャンネルIDが入力されていてURLが空なら、同じチャンネルIDの既存行から
+//   LIFFのURL（?以前のベース部分）をコピーして ?source=<新ID> を付与する
+// ----------------------------------------------------
+function handleSchoolSettingEdit(e) {
+	const sheet = e.range.getSheet();
+	const editedRow = e.range.getRow();
+	const lastCol = sheet.getLastColumn();
+	const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+	const idIdx = headers.indexOf("スクールID");
+	const nameIdx = headers.indexOf("スクール名");
+	const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
+	const urlIdx = headers.indexOf("リッチメニューに追加するURL");
+
+	if (idIdx === -1 || nameIdx === -1) return; // 列がなければ何もしない
+
+	const rowValues = sheet.getRange(editedRow, 1, 1, lastCol).getValues()[0];
+	const name = String(rowValues[nameIdx] || "").trim();
+	let currentId = String(rowValues[idIdx] || "").trim();
+
+	// 1. ID自動採番：スクール名が入っていて、スクールIDが未入力なら
+	if (name && !currentId) {
+		currentId = generateNextSchoolId(sheet, idIdx);
+		sheet.getRange(editedRow, idIdx + 1).setValue(currentId);
+		writeLog(
+			"INFO",
+			"handleSchoolSettingEdit",
+			"ID自動採番: 行" + editedRow + " " + name + " → " + currentId,
+		);
+	}
+
+	// 2. URL自動生成：チャンネルIDが入っていて、URLが空ならテンプレートから生成
+	if (urlIdx !== -1 && channelIdIdx !== -1 && currentId) {
+		const url = String(rowValues[urlIdx] || "").trim();
+		const channelId = String(rowValues[channelIdIdx] || "").trim();
+		if (channelId && !url) {
+			const liffBase = findLiffBaseForChannel(sheet, channelIdIdx, urlIdx, channelId, editedRow);
+			if (liffBase) {
+				const newUrl = liffBase + "?source=" + encodeURIComponent(currentId);
+				sheet.getRange(editedRow, urlIdx + 1).setValue(newUrl);
+				writeLog(
+					"INFO",
+					"handleSchoolSettingEdit",
+					"URL自動生成: 行" + editedRow + " → " + newUrl,
+				);
+			} else {
+				writeLog(
+					"WARN",
+					"handleSchoolSettingEdit",
+					"行" + editedRow + ": チャンネルID " + channelId + " のLIFF URLサンプルが見つからず、URL自動生成をスキップ",
+				);
+			}
+		}
+	}
+}
+
+// 既存のスクールIDから次の連番（s001, s002, ...）を生成
+function generateNextSchoolId(sheet, idIdx) {
+	const lastRow = sheet.getLastRow();
+	let maxNum = 0;
+	if (lastRow >= 2) {
+		const idCol = sheet.getRange(2, idIdx + 1, lastRow - 1, 1).getValues();
+		idCol.forEach((r) => {
+			const m = String(r[0] || "").match(/^s(\d+)$/);
+			if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+		});
+	}
+	return "s" + String(maxNum + 1).padStart(3, "0");
+}
+
+// 同じチャンネルIDの行で既に設定済みのURLからLIFFベース（?以前）を取り出す
+// excludeRow: 自分自身の行は除外
+function findLiffBaseForChannel(sheet, channelIdIdx, urlIdx, channelId, excludeRow) {
+	const lastRow = sheet.getLastRow();
+	if (lastRow < 2) return null;
+	const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+	for (let i = 0; i < data.length; i++) {
+		if (i + 2 === excludeRow) continue;
+		if (String(data[i][channelIdIdx] || "").trim() !== channelId) continue;
+		const u = String(data[i][urlIdx] || "").trim();
+		if (!u) continue;
+		const qi = u.indexOf("?");
+		return qi !== -1 ? u.substring(0, qi) : u;
+	}
+	return null;
+}
+
+// ----------------------------------------------------
 // スプレッドシートを開いたときのメニュー追加
 // ----------------------------------------------------
 function onOpen() {
@@ -1016,7 +1160,144 @@ function onOpen() {
 		.addItem("SKUを在庫シートに自動展開", "generateSKUs")
 		.addSeparator()
 		.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
+		.addSeparator()
+		.addItem("🔧 スクールIDを採番＆URL更新（移行用）", "migrateAddSchoolIds")
 		.addToUi();
+}
+
+// ----------------------------------------------------
+// 【移行用 / 1回実行】スクール設定シートにスクールID列を追加し、
+// 既存行に s001, s002... を採番。さらにリッチメニューURLの
+// ?source= の値をスクールIDに置き換える。
+// 何度実行しても安全（idempotent）。
+// ----------------------------------------------------
+function migrateAddSchoolIds() {
+	const ss = SpreadsheetApp.getActiveSpreadsheet();
+	const sheet = ss.getSheetByName("スクール設定");
+	if (!sheet) {
+		const msg = "スクール設定シートが見つかりません";
+		writeLog("ERROR", "migrateAddSchoolIds", msg);
+		return { success: false, message: msg };
+	}
+
+	const lastCol = sheet.getLastColumn();
+	let headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+	let idIdx = headers.indexOf("スクールID");
+
+	// 1. スクールID列がなければ末尾に追加
+	if (idIdx === -1) {
+		const newColNum = lastCol + 1;
+		sheet.getRange(1, newColNum).setValue("スクールID");
+		sheet
+			.getRange(1, newColNum)
+			.setFontWeight("bold")
+			.setBackground("#f3f4f6");
+		writeLog("INFO", "migrateAddSchoolIds", "スクールID列を追加（列番号: " + newColNum + "）");
+		// 再読み込み
+		headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+		idIdx = headers.indexOf("スクールID");
+	}
+
+	const nameIdx = headers.indexOf("スクール名");
+	const urlIdx = headers.indexOf("リッチメニューに追加するURL");
+	if (nameIdx === -1) {
+		const msg = "「スクール名」列が見つかりません";
+		writeLog("ERROR", "migrateAddSchoolIds", msg);
+		return { success: false, message: msg };
+	}
+
+	const lastRow = sheet.getLastRow();
+	if (lastRow < 2) {
+		return { success: true, message: "データ行がありません", assigned: 0 };
+	}
+
+	const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+
+	// 既存IDの最大値を取得
+	let maxNum = 0;
+	data.forEach((row) => {
+		const m = String(row[idIdx] || "").match(/^s(\d+)$/);
+		if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+	});
+
+	let assignedCount = 0;
+	let urlUpdatedCount = 0;
+
+	for (let i = 0; i < data.length; i++) {
+		const row = data[i];
+		const name = String(row[nameIdx] || "").trim();
+		if (!name) continue; // 空行はスキップ
+
+		// IDの採番
+		let id = String(row[idIdx] || "").trim();
+		if (!id || !/^s\d+$/.test(id)) {
+			maxNum++;
+			id = "s" + String(maxNum).padStart(3, "0");
+			sheet.getRange(i + 2, idIdx + 1).setValue(id);
+			assignedCount++;
+			writeLog("INFO", "migrateAddSchoolIds", "ID採番: " + name + " → " + id);
+		}
+
+		// URLの ?source= をIDに置き換え
+		if (urlIdx !== -1) {
+			const url = String(row[urlIdx] || "").trim();
+			if (url) {
+				const newUrl = replaceSourceParam(url, id);
+				if (newUrl !== url) {
+					sheet.getRange(i + 2, urlIdx + 1).setValue(newUrl);
+					urlUpdatedCount++;
+					writeLog("INFO", "migrateAddSchoolIds", "URL更新: " + name + " → " + newUrl);
+				}
+			}
+		}
+	}
+
+	const summary =
+		"完了: ID採番 " + assignedCount + "件 / URL更新 " + urlUpdatedCount + "件";
+	writeLog("INFO", "migrateAddSchoolIds", summary);
+
+	// UIから呼ばれた場合のみアラート表示
+	try {
+		SpreadsheetApp.getUi().alert(summary);
+	} catch (e) {
+		// run_script_function 等から呼ばれた場合はUIなし
+	}
+
+	return {
+		success: true,
+		message: summary,
+		assigned: assignedCount,
+		urlUpdated: urlUpdatedCount,
+	};
+}
+
+// URLの ?source= パラメータを newSource に置き換える
+// source= が無ければ末尾に追加する
+function replaceSourceParam(url, newSource) {
+	const encoded = encodeURIComponent(newSource);
+	const qIdx = url.indexOf("?");
+	if (qIdx === -1) {
+		return url + "?source=" + encoded;
+	}
+	const base = url.substring(0, qIdx);
+	const query = url.substring(qIdx + 1);
+	const params = query.split("&").filter(function (p) {
+		return p.length > 0;
+	});
+	let foundSource = false;
+	const newParams = params.map(function (p) {
+		const eqIdx = p.indexOf("=");
+		const key = eqIdx === -1 ? p : p.substring(0, eqIdx);
+		if (key === "source") {
+			foundSource = true;
+			return "source=" + encoded;
+		}
+		return p;
+	});
+	if (!foundSource) {
+		newParams.push("source=" + encoded);
+	}
+	return base + "?" + newParams.join("&");
 }
 
 // ----------------------------------------------------

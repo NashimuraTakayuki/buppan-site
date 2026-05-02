@@ -4,7 +4,7 @@
 
 // ---- グローバル状態変数 ----
 let lineUserId = ""; // LINE連携済みの場合にユーザーIDが入る
-let lineSource = ""; // アクセス元の公式LINE識別子（URLパラメータ ?source= から取得）
+let lineSource = ""; // アクセス元の公式LINEを識別するスクールID（URLパラメータ ?source= から取得）
 let globalProducts = []; // スプレッドシートから取得した商品一覧
 let cart = []; // カートの中身
 let currentSelectedProduct = null; // モーダルで選択中の商品
@@ -41,7 +41,7 @@ window.onload = async function () {
 	const lineCode = params.get("code");
 	const isLineApp = /Line\//.test(navigator.userAgent);
 
-	// --- アクセス元公式LINE識別子の取得（LIFFリンクに ?source=xxx を付与して使用）---
+	// --- アクセス元スクールIDの取得（LIFFリンクに ?source=<スクールID> を付与して使用）---
 	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
 	lineSource = params.get("source") || "";
 	if (!lineSource) {
@@ -62,6 +62,7 @@ window.onload = async function () {
 	}
 
 	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
+	// 返却フォーマット: [{ id, name, lineChannelId }, ...]
 	let schoolData = [];
 	try {
 		schoolData = await gasGet("getSchoolList");
@@ -71,8 +72,8 @@ window.onload = async function () {
 
 	if (lineCode) {
 		try {
-			// スクール名を渡してGAS側で正しいチャンネルのシークレットを使って交換
-			const data = await gasPost("exchangeLineCode", { code: lineCode, schoolName: lineSource });
+			// スクールIDを渡してGAS側で正しいチャンネルのシークレットを使って交換
+			const data = await gasPost("exchangeLineCode", { code: lineCode, schoolId: lineSource });
 			lineUserId = data.userId || "";
 		} catch (e) {
 			console.error("LINE code exchange failed:", e);
@@ -91,7 +92,7 @@ window.onload = async function () {
 			.catch(() => {});
 	} else if (isLineApp) {
 		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
-		const schoolEntry = schoolData.find((s) => s.name === lineSource);
+		const schoolEntry = (schoolData || []).find((s) => s && s.id === lineSource);
 		const channelId =
 			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
 		window.location.href = buildLineAuthUrl(channelId);
@@ -143,6 +144,7 @@ window.onload = async function () {
 
 // ============================================================
 // スクール選択肢の初期化
+// schools: [{ id, name, lineChannelId }, ...]
 // ============================================================
 function initSchoolSelect(schools) {
 	const select = document.getElementById("input-school");
@@ -150,22 +152,44 @@ function initSchoolSelect(schools) {
 		select.innerHTML = '<option value="">スクール一覧の取得に失敗しました</option>';
 		return;
 	}
-	// {name, lineChannelId} 形式と後方互換のため文字列にも対応
-	const schoolNames = schools.map((s) => (typeof s === "string" ? s : s.name));
+	// 旧形式（文字列のみ／name のみ）にも一応対応しておく
+	const normalized = schools.map((s) => {
+		if (typeof s === "string") return { id: "", name: s, lineChannelId: "" };
+		return {
+			id: String(s.id || "").trim(),
+			name: String(s.name || "").trim(),
+			lineChannelId: String(s.lineChannelId || "").trim(),
+		};
+	});
+
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
-	// 優先順位: LocalStorage保存済み > lineSource(LIFFリンクのsourceパラメータ) > 未選択
-	const sourceCandidate = schoolNames.includes(lineSource) ? lineSource : "";
-	const initialSchool = sourceCandidate || customerInfo.school;
-	schoolNames.forEach((name) => {
+
+	// lineSource はスクールID。一致するスクールを探して、その「名前」を初期選択にする
+	const sourceMatch = lineSource ? normalized.find((s) => s.id === lineSource) : null;
+	const sourceName = sourceMatch ? sourceMatch.name : "";
+
+	// 優先順位: LIFFリンクのsource（=スクールID）から解決した名前 > LocalStorageの school 名 > 未選択
+	const initialSchool = sourceName || customerInfo.school;
+
+	normalized.forEach((s) => {
 		const option = document.createElement("option");
-		option.value = name;
-		option.textContent = name;
-		if (initialSchool === name) option.selected = true;
+		option.value = s.name;
+		option.textContent = s.name;
+		if (initialSchool === s.name) option.selected = true;
 		select.appendChild(option);
 	});
-	if (!customerInfo.school && sourceCandidate) {
-		customerInfo.school = sourceCandidate;
+
+	if (!customerInfo.school && sourceName) {
+		customerInfo.school = sourceName;
 	}
+
+	// 不正なlineSource（IDが見つからない）はlocalStorageからクリアして混乱を避ける
+	// in-memory も空にしておくことで以降のAPI呼び出し（注文等）にも不正値が混ざらないようにする
+	if (lineSource && !sourceMatch) {
+		localStorage.removeItem("aslish_line_source");
+		lineSource = "";
+	}
+
 	// LocalStorage に値があればバリデーション（緑枠）を適用
 	["input-email", "input-name", "input-school"].forEach((id) => {
 		if (document.getElementById(id).value) validateField(id);
