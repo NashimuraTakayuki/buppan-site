@@ -108,8 +108,15 @@ window.onload = async function () {
 		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
 		// 無限ループを防ぐため、code がある（認証から戻ってきた）場合はリダイレクトしない
 		const schoolEntry = (schoolData || []).find((s) => s && (s.id === lineSource || s.name === lineSource));
+		// チャンネルIDのシングルソース: スクール設定シートの「LINEログインチャンネルID」列
+		// マッチするスクールのID → なければschoolData内の最初の有効なID（ハードコード値は使用しない）
 		const channelId =
-			schoolEntry && schoolEntry.lineChannelId ? schoolEntry.lineChannelId : LINE_CHANNEL_ID;
+			(schoolEntry && schoolEntry.lineChannelId) ||
+			((schoolData || []).find((s) => s && s.lineChannelId) || {}).lineChannelId;
+		if (!channelId) {
+			console.error("[LINE Login] チャンネルIDがスクール設定シートに見つかりません。スプレッドシートの「スクール設定」シートにLINEログインチャンネルIDを設定してください。");
+			return;
+		}
 		window.location.href = buildLineAuthUrl(channelId);
 		return;
 	}

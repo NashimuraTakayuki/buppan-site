@@ -193,7 +193,19 @@ function getSchoolLoginConfig(schoolId) {
 		);
 		if (idIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
 		const target = String(schoolId || "").trim();
-		if (!target) return {};
+		if (!target) {
+			// schoolIdが空の場合はスクール設定シートの最初の有効なエントリをフォールバックとして使用
+			// （システム設定シートのハードコード値は参照しない）
+			for (let i = 1; i < data.length; i++) {
+				const channelId = String(data[i][channelIdIdx]).trim();
+				const channelSecret = String(data[i][channelSecretIdx]).trim();
+				if (channelId && channelSecret) {
+					writeLog("INFO", "getSchoolLoginConfig", "schoolIdなし → スクール設定シートの最初のエントリを使用: " + data[i][idIdx]);
+					return { channelId, channelSecret };
+				}
+			}
+			return {};
+		}
 		for (let i = 1; i < data.length; i++) {
 			if (String(data[i][idIdx]).trim() === target) {
 				const channelId = String(data[i][channelIdIdx]).trim();
@@ -212,7 +224,9 @@ function getSchoolLoginConfig(schoolId) {
 // 引数: code, schoolId（スクールID。空ならデフォルトのチャンネル設定を使用）
 // ----------------------------------------------------
 function getLineUserIdFromCode(code, schoolId) {
-	const loginConfig = schoolId ? getSchoolLoginConfig(schoolId) : {};
+	// チャンネルIDのシングルソース: スクール設定シートの「LINEログインチャンネルID」列
+	// schoolIdが空の場合もgetSchoolLoginConfig内でシートの最初のエントリを参照する
+	const loginConfig = getSchoolLoginConfig(schoolId);
 	const CHANNEL_ID = loginConfig.channelId || CONFIG.lineLogin.channelId;
 	const CHANNEL_SECRET = loginConfig.channelSecret || CONFIG.lineLogin.channelSecret;
 	const REDIRECT_URI = CONFIG.lineLogin.redirectUri;
