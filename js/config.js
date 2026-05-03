@@ -8,7 +8,7 @@ const GAS_URL =
 	"https://script.google.com/macros/s/AKfycbzi7X-uyxvxDIQyiwGeaYyyM_ks6aSvpmJs8uj3jcv8RcPf78cANXWH14L7h2SZY7RkZg/exec";
 
 /** LINE Login チャネルID */
-const LINE_CHANNEL_ID = "2009555332";
+const LINE_CHANNEL_ID = "2009818388";
 
 /** LINE Login コールバックURL（Netlifyのデプロイ先に合わせる） */
 const REDIRECT_URI = "https://buppan-site.weathered-hill-1bba.workers.dev/";
