@@ -56,9 +56,15 @@ window.onload = async function () {
 	}
 	// LINE Login リダイレクト後も source を引き継ぐため localStorage に退避・復元する
 	if (lineSource) {
+		// URLから source が取得できた場合 → localStorage に保存して使用
 		localStorage.setItem("aslish_line_source", lineSource);
-	} else {
+	} else if (lineCode) {
+		// LINE Login リダイレクト後（URL に code がある）→ localStorage から復元
 		lineSource = localStorage.getItem("aslish_line_source") || "";
+	} else {
+		// source も code もない直接アクセス → 未選択状態にし、古い値をクリア
+		localStorage.removeItem("aslish_line_source");
+		lineSource = "";
 	}
 
 	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
