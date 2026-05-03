@@ -59,8 +59,14 @@ window.onload = async function () {
 		// URLから source が取得できた場合 → localStorage に保存して使用
 		localStorage.setItem("aslish_line_source", lineSource);
 	} else if (lineCode) {
-		// LINE Login リダイレクト後（URL に code がある）→ localStorage から復元
-		lineSource = localStorage.getItem("aslish_line_source") || "";
+		// LINE Login リダイレクト後（URL に code がある）
+		// → まず state パラメータから復元（最も確実）、なければ localStorage にフォールバック
+		const stateParam = params.get("state") || "";
+		const stateParts = stateParam.split("|");
+		lineSource = stateParts[1] || localStorage.getItem("aslish_line_source") || "";
+		if (lineSource) {
+			localStorage.setItem("aslish_line_source", lineSource);
+		}
 	} else {
 		// source も code もない直接アクセス → 未選択状態にし、古い値をクリア
 		localStorage.removeItem("aslish_line_source");
@@ -123,7 +129,8 @@ window.onload = async function () {
 			console.error("[LINE Login] チャンネルIDがスクール設定シートに見つかりません。スプレッドシートの「スクール設定」シートにLINEログインチャンネルIDを設定してください。");
 			return;
 		}
-		window.location.href = buildLineAuthUrl(channelId);
+		// lineSource を state パラメータに埋め込んでリダイレクト後も確実に復元できるようにする
+		window.location.href = buildLineAuthUrl(channelId, lineSource);
 		return;
 	}
 

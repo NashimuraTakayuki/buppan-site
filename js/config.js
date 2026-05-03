@@ -14,8 +14,12 @@ const REDIRECT_URI = "https://buppan-site.weathered-hill-1bba.workers.dev/";
  * LINE Login 認証URL を生成する
  * channelId はスプレッドシートの「スクール設定」シートの
  * 「LINEログインチャンネルID」列から取得してください（ハードコード不要）
+ *
+ * sourceId を渡すと state パラメータに "aslish_sales|{sourceId}" として埋め込む。
+ * LINE Login リダイレクト後も state から確実に復元できる（liff.state 解析に依存しない）。
  */
-function buildLineAuthUrl(channelId) {
+function buildLineAuthUrl(channelId, sourceId) {
+	const state = "aslish_sales" + (sourceId ? "|" + sourceId : "");
 	return (
 		"https://access.line.me/oauth2/v2.1/authorize" +
 		"?response_type=code" +
@@ -23,7 +27,8 @@ function buildLineAuthUrl(channelId) {
 		channelId +
 		"&redirect_uri=" +
 		encodeURIComponent(REDIRECT_URI) +
-		"&state=aslish_sales" +
+		"&state=" +
+		encodeURIComponent(state) +
 		"&scope=profile" +
 		"&bot_prompt=normal"
 	);
