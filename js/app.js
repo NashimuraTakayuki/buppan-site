@@ -222,8 +222,8 @@ function initSchoolSelect(schools) {
 		localStorage.setItem("aslish_line_source", lineSource);
 	}
 
-	// 優先順位: LIFFリンクのsource（=スクールID）から解決した名前 > LocalStorageの school 名 > 未選択
-	const initialSchool = sourceName || customerInfo.school;
+	// sourceから解決したスクール名のみ使用。sourceなし・不一致の場合は未選択のまま
+	const initialSchool = sourceName;
 
 	normalized.forEach((s) => {
 		const option = document.createElement("option");
@@ -257,20 +257,7 @@ function prefillCustomerInfo(info) {
 	if (!info) return;
 	if (info.email) document.getElementById("input-email").value = info.email;
 	if (info.memberName) document.getElementById("input-name").value = info.memberName;
-	// lineSource がある場合はLIFFリンクの source を優先するためスクールの上書きをしない
-	if (info.school && !lineSource) {
-		const trySet = (attempt) => {
-			const select = document.getElementById("input-school");
-			for (let i = 0; i < select.options.length; i++) {
-				if (select.options[i].value === info.school) {
-					select.selectedIndex = i;
-					return;
-				}
-			}
-			if (attempt < 10) setTimeout(() => trySet(attempt + 1), 200);
-		};
-		trySet(0);
-	}
+	// スクール選択はsource（LIFFリンク）からのみ行う。過去の注文履歴からは上書きしない
 	["input-email", "input-name"].forEach((id) => {
 		if (document.getElementById(id).value) validateField(id);
 	});
