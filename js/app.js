@@ -40,37 +40,70 @@ window.onload = async function () {
 	const params = new URLSearchParams(window.location.search);
 	const lineCode = params.get("code");
 	const isLineApp = /Line\//.test(navigator.userAgent);
+	const isDebugMode = params.get("debug") === "1" || isLineApp;
 
 	// --- アクセス元スクールIDの取得（LIFFリンクに ?source=<スクールID> を付与して使用）---
 	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
 	lineSource = params.get("source") || "";
-	if (!lineSource) {
-		const liffState = params.get("liff.state");
-		if (liffState) {
-			try {
-				const decoded = decodeURIComponent(liffState);
-				const liffParams = new URLSearchParams(decoded.replace(/^\?/, ""));
-				lineSource = liffParams.get("source") || "";
-			} catch (e) {}
+	const liffState = params.get("liff.state") || "";
+	let liffStateDecoded = "";
+	if (!lineSource && liffState) {
+		try {
+			liffStateDecoded = decodeURIComponent(liffState);
+			const liffParams = new URLSearchParams(liffStateDecoded.replace(/^\?/, ""));
+			lineSource = liffParams.get("source") || "";
+		} catch (e) {
+			liffStateDecoded = "(decode error: " + e.message + ")";
 		}
 	}
 	// LINE Login リダイレクト後も source を引き継ぐため localStorage に退避・復元する
+	let sourceFrom = "";
+	const stateParam = params.get("state") || "";
 	if (lineSource) {
 		// URLから source が取得できた場合 → localStorage に保存して使用
+		sourceFrom = liffState ? "liff.state" : "URLパラメータ";
 		localStorage.setItem("aslish_line_source", lineSource);
 	} else if (lineCode) {
 		// LINE Login リダイレクト後（URL に code がある）
 		// → まず state パラメータから復元（最も確実）、なければ localStorage にフォールバック
-		const stateParam = params.get("state") || "";
 		const stateParts = stateParam.split("|");
-		lineSource = stateParts[1] || localStorage.getItem("aslish_line_source") || "";
-		if (lineSource) {
-			localStorage.setItem("aslish_line_source", lineSource);
+		if (stateParts[1]) {
+			lineSource = stateParts[1];
+			sourceFrom = "stateパラメータ";
+		} else {
+			lineSource = localStorage.getItem("aslish_line_source") || "";
+			sourceFrom = "localStorage(フォールバック)";
 		}
+		if (lineSource) localStorage.setItem("aslish_line_source", lineSource);
 	} else {
 		// source も code もない直接アクセス → 未選択状態にし、古い値をクリア
+		sourceFrom = "なし(直接アクセス)";
 		localStorage.removeItem("aslish_line_source");
 		lineSource = "";
+	}
+
+	// --- デバッグパネル（LINEブラウザまたは?debug=1のとき表示）---
+	if (isDebugMode) {
+		const panel = document.createElement("div");
+		panel.id = "debug-panel";
+		panel.style.cssText = "position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;padding:8px;z-index:9999;max-height:50vh;overflow-y:auto;font-family:monospace;word-break:break-all;";
+		const update = () => {
+			panel.innerHTML =
+				"<b style='color:#ff0'>[DEBUG]</b> " +
+				"<button onclick=\"document.getElementById('debug-panel').remove()\" style='float:right;background:#f00;color:#fff;border:none;padding:2px 6px;'>✕</button><br>" +
+				"URL: " + window.location.href + "<br>" +
+				"isLineApp: " + isLineApp + "<br>" +
+				"lineCode: " + (lineCode ? lineCode.substring(0, 10) + "..." : "なし") + "<br>" +
+				"source(URL): " + (params.get("source") || "なし") + "<br>" +
+				"liff.state(raw): " + (liffState ? liffState.substring(0, 60) : "なし") + "<br>" +
+				"liff.state(decoded): " + (liffStateDecoded ? liffStateDecoded.substring(0, 60) : "なし") + "<br>" +
+				"state(param): " + (stateParam || "なし") + "<br>" +
+				"lineSource(最終): " + (lineSource || "なし") + "<br>" +
+				"sourceFrom: " + sourceFrom + "<br>" +
+				"localStorage: " + (localStorage.getItem("aslish_line_source") || "なし");
+		};
+		update();
+		document.body.appendChild(panel);
 	}
 
 	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
