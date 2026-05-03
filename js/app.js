@@ -40,7 +40,6 @@ window.onload = async function () {
 	const params = new URLSearchParams(window.location.search);
 	const lineCode = params.get("code");
 	const isLineApp = /Line\//.test(navigator.userAgent);
-	const isDebugMode = params.get("debug") === "1" || isLineApp;
 
 	// --- アクセス元スクールIDの取得（LIFFリンクに ?source=<スクールID> を付与して使用）---
 	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
@@ -80,30 +79,6 @@ window.onload = async function () {
 		sourceFrom = "なし(直接アクセス)";
 		localStorage.removeItem("aslish_line_source");
 		lineSource = "";
-	}
-
-	// --- デバッグパネル（LINEブラウザまたは?debug=1のとき表示）---
-	if (isDebugMode) {
-		const panel = document.createElement("div");
-		panel.id = "debug-panel";
-		panel.style.cssText = "position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;padding:8px;z-index:9999;max-height:50vh;overflow-y:auto;font-family:monospace;word-break:break-all;";
-		const update = () => {
-			panel.innerHTML =
-				"<b style='color:#ff0'>[DEBUG]</b> " +
-				"<button onclick=\"document.getElementById('debug-panel').remove()\" style='float:right;background:#f00;color:#fff;border:none;padding:2px 6px;'>✕</button><br>" +
-				"URL: " + window.location.href + "<br>" +
-				"isLineApp: " + isLineApp + "<br>" +
-				"lineCode: " + (lineCode ? lineCode.substring(0, 10) + "..." : "なし") + "<br>" +
-				"source(URL): " + (params.get("source") || "なし") + "<br>" +
-				"liff.state(raw): " + (liffState ? liffState.substring(0, 60) : "なし") + "<br>" +
-				"liff.state(decoded): " + (liffStateDecoded ? liffStateDecoded.substring(0, 60) : "なし") + "<br>" +
-				"state(param): " + (stateParam || "なし") + "<br>" +
-				"lineSource(最終): " + (lineSource || "なし") + "<br>" +
-				"sourceFrom: " + sourceFrom + "<br>" +
-				"localStorage: " + (localStorage.getItem("aslish_line_source") || "なし");
-		};
-		update();
-		document.body.appendChild(panel);
 	}
 
 	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
@@ -152,14 +127,18 @@ window.onload = async function () {
 	} else if (isLineApp && !lineCode) {
 		// LINE アプリ内でアクセスしていて未連携なら、スクール別チャンネルIDで認証へリダイレクト
 		// 無限ループを防ぐため、code がある（認証から戻ってきた）場合はリダイレクトしない
-		const schoolEntry = (schoolData || []).find((s) => s && (s.id === lineSource || s.name === lineSource));
+		const schoolEntry = (schoolData || []).find(
+			(s) => s && (s.id === lineSource || s.name === lineSource),
+		);
 		// チャンネルIDのシングルソース: スクール設定シートの「LINEログインチャンネルID」列
 		// マッチするスクールのID → なければschoolData内の最初の有効なID（ハードコード値は使用しない）
 		const channelId =
 			(schoolEntry && schoolEntry.lineChannelId) ||
 			((schoolData || []).find((s) => s && s.lineChannelId) || {}).lineChannelId;
 		if (!channelId) {
-			console.error("[LINE Login] チャンネルIDがスクール設定シートに見つかりません。スプレッドシートの「スクール設定」シートにLINEログインチャンネルIDを設定してください。");
+			console.error(
+				"[LINE Login] チャンネルIDがスクール設定シートに見つかりません。スプレッドシートの「スクール設定」シートにLINEログインチャンネルIDを設定してください。",
+			);
 			return;
 		}
 		// lineSource を state パラメータに埋め込んでリダイレクト後も確実に復元できるようにする
@@ -233,7 +212,9 @@ function initSchoolSelect(schools) {
 	select.innerHTML = '<option value="">スクールを選択してください</option>';
 
 	// lineSource はスクールID（または移行前のスクール名）。一致するスクールを探して、その「名前」を初期選択にする
-	const sourceMatch = lineSource ? normalized.find((s) => s.id === lineSource || s.name === lineSource) : null;
+	const sourceMatch = lineSource
+		? normalized.find((s) => s.id === lineSource || s.name === lineSource)
+		: null;
 	const sourceName = sourceMatch ? sourceMatch.name : "";
 
 	// 名前でマッチした場合、lineSource を正規のID（s00X）で上書き（標準化）
