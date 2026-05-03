@@ -130,20 +130,17 @@ window.onload = async function () {
 		const schoolEntry = (schoolData || []).find(
 			(s) => s && (s.id === lineSource || s.name === lineSource),
 		);
-		// チャンネルIDのシングルソース: スクール設定シートの「LINEログインチャンネルID」列
-		// マッチするスクールのID → なければschoolData内の最初の有効なID（ハードコード値は使用しない）
-		const channelId =
-			(schoolEntry && schoolEntry.lineChannelId) ||
-			((schoolData || []).find((s) => s && s.lineChannelId) || {}).lineChannelId;
-		if (!channelId) {
-			console.error(
-				"[LINE Login] チャンネルIDがスクール設定シートに見つかりません。スプレッドシートの「スクール設定」シートにLINEログインチャンネルIDを設定してください。",
-			);
+		// sourceが特定のスクールに対応している場合のみLINE Loginへリダイレクト
+		// sourceなし・スクール不明の場合はフォールバックせず、ユーザーに手動でスクールを選ばせる
+		const channelId = schoolEntry && schoolEntry.lineChannelId;
+		if (channelId) {
+			// スクールが特定できた場合のみLINE Loginへリダイレクト
+			// lineSource を state パラメータに埋め込んでリダイレクト後も確実に復元できるようにする
+			window.location.href = buildLineAuthUrl(channelId, lineSource);
 			return;
 		}
-		// lineSource を state パラメータに埋め込んでリダイレクト後も確実に復元できるようにする
-		window.location.href = buildLineAuthUrl(channelId, lineSource);
-		return;
+		// スクールが特定できない場合はフォールバックせず、未選択状態のまま通常表示に進む
+		console.warn("[LINE Login] sourceからスクールを特定できないため、自動ログインをスキップします。");
 	}
 
 	// --- ログイン画面を表示（スクール一覧は取得済み）---

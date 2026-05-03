@@ -194,16 +194,7 @@ function getSchoolLoginConfig(schoolId) {
 		if (idIdx === -1 || channelIdIdx === -1 || channelSecretIdx === -1) return {};
 		const target = String(schoolId || "").trim();
 		if (!target) {
-			// schoolIdが空の場合はスクール設定シートの最初の有効なエントリをフォールバックとして使用
-			// （システム設定シートのハードコード値は参照しない）
-			for (let i = 1; i < data.length; i++) {
-				const channelId = String(data[i][channelIdIdx]).trim();
-				const channelSecret = String(data[i][channelSecretIdx]).trim();
-				if (channelId && channelSecret) {
-					writeLog("INFO", "getSchoolLoginConfig", "schoolIdなし → スクール設定シートの最初のエントリを使用: " + data[i][idIdx]);
-					return { channelId, channelSecret };
-				}
-			}
+			// schoolIdが空の場合はフォールバックせず空を返す（CONFIG_DEFAULTSに委ねる）
 			return {};
 		}
 		for (let i = 1; i < data.length; i++) {
