@@ -1,224 +1,273 @@
 <!doctype html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <base target="_top" />
-  <title>アスリッシュショップ</title>
-  <!-- スタイルシート -->
-  <link rel="stylesheet" href="css/style.css" />
-</head>
-<body>
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+		/>
+		<base target="_top" />
+		<title>アスリッシュショップ</title>
+		<!-- スタイルシート -->
+		<link rel="stylesheet" href="css/style.css" />
+	</head>
+	<body>
+		<!-- ヘッダー（タップでトップに戻る） -->
+		<header onclick="backToTop()" style="cursor: pointer">
+			<h2>アスリッシュショップ</h2>
+		</header>
 
-  <!-- ヘッダー（タップでトップに戻る） -->
-  <header onclick="backToTop()" style="cursor: pointer">
-    <h2>アスリッシュ ショップ</h2>
-  </header>
+		<!-- LINE連携バナー -->
+		<div
+			id="line-status"
+			style="
+				display: none;
+				text-align: center;
+				padding: 6px;
+				background: #06c755;
+				color: white;
+				font-size: 0.82rem;
+				font-weight: bold;
+			"
+		>
+			✓ LINEアカウント連携済み
+		</div>
 
-  <!-- LINE連携バナー -->
-  <div
-    id="line-status"
-    style="
-      display: none;
-      text-align: center;
-      padding: 6px;
-      background: #06c755;
-      color: white;
-      font-size: 0.82rem;
-      font-weight: bold;
-    "
-  >
-    ✓ LINEアカウント連携済み
-  </div>
+		<!-- ローディングスピナー -->
+		<div id="loading" class="spinner-wrapper">
+			<div class="spinner"></div>
+			<div id="loading-text">データを読み込んでいます...</div>
+		</div>
 
-  <!-- ローディングスピナー -->
-  <div id="loading" class="spinner-wrapper">
-    <div class="spinner"></div>
-    <div id="loading-text">データを読み込んでいます...</div>
-  </div>
+		<div class="container">
+			<!-- 画面①：お客様情報入力 -->
+			<div id="login-view" style="display: none">
+				<h3 style="text-align: center; color: #555">はじめにお客様情報を<br />入力してください</h3>
+				<div class="card">
+					<div class="form-group">
+						<label>メールアドレス</label>
+						<input type="email" id="input-email" placeholder="例: info@example.com" />
+					</div>
+					<div class="form-group">
+						<label>参加スクール</label>
+						<select id="input-school">
+							<option value="">読み込み中...</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label>会員氏名</label>
+						<input type="text" id="input-name" placeholder="例: 山田 太郎" />
+					</div>
+					<button class="primary-btn" onclick="startShopping()">商品一覧へ進む</button>
+				</div>
+			</div>
 
-  <div class="container">
+			<!-- 画面②：商品一覧 -->
+			<div id="product-list-view" style="display: none">
+				<div id="category-tabs" class="category-tabs"></div>
+				<div id="app" class="product-grid"></div>
+			</div>
 
-    <!-- 画面①：お客様情報入力 -->
-    <div id="login-view" style="display: none">
-      <h3 style="text-align: center; color: #555">はじめにお客様情報を<br />入力してください</h3>
-      <div class="card">
-        <div class="form-group">
-          <label>メールアドレス</label>
-          <input type="email" id="input-email" placeholder="例: info@example.com" />
-        </div>
-        <div class="form-group">
-          <label>参加スクール</label>
-          <select id="input-school">
-            <option value="">読み込み中...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>会員氏名</label>
-          <input type="text" id="input-name" placeholder="例: 山田 太郎" />
-        </div>
-        <button class="primary-btn" onclick="startShopping()">商品一覧へ進む</button>
-      </div>
-    </div>
+			<!-- 画面③：カート -->
+			<div id="cart-view" style="display: none">
+				<h2 style="text-align: center">🛒 カートの中身</h2>
 
-    <!-- 画面②：商品一覧 -->
-    <div id="product-list-view" style="display: none">
-      <div id="category-tabs" class="category-tabs"></div>
-      <div id="app" class="product-grid"></div>
-    </div>
+				<!-- お客様情報 -->
+				<div class="card">
+					<div
+						style="
+							display: flex;
+							justify-content: space-between;
+							align-items: center;
+							margin-bottom: 12px;
+						"
+					>
+						<h3 style="margin: 0; font-size: 1.05rem; color: #555">お客様情報</h3>
+						<button
+							onclick="editUserInfo()"
+							style="
+								background: transparent;
+								color: #666;
+								border: 1px solid #ccc;
+								border-radius: 6px;
+								padding: 6px 12px;
+								cursor: pointer;
+								font-size: 0.85rem;
+								font-weight: bold;
+							"
+						>
+							修正する
+						</button>
+					</div>
+					<div class="info-display" id="cart-customer-info"></div>
+				</div>
 
-    <!-- 画面③：カート -->
-    <div id="cart-view" style="display: none">
-      <h2 style="text-align: center">🛒 カートの中身</h2>
+				<!-- カートアイテム -->
+				<div class="card">
+					<div id="editable-cart-container"></div>
+				</div>
 
-      <!-- お客様情報 -->
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 style="margin: 0; font-size: 1.05rem; color: #555">お客様情報</h3>
-          <button
-            onclick="editUserInfo()"
-            style="
-              background: transparent;
-              color: #666;
-              border: 1px solid #ccc;
-              border-radius: 6px;
-              padding: 6px 12px;
-              cursor: pointer;
-              font-size: 0.85rem;
-              font-weight: bold;
-            "
-          >
-            修正する
-          </button>
-        </div>
-        <div class="info-display" id="cart-customer-info"></div>
-      </div>
+				<button class="primary-btn" id="submit-btn" onclick="submitOrder()">注文確定</button>
+				<button class="back-btn" id="back-btn" onclick="backToShopping()">買い物を続ける</button>
+			</div>
 
-      <!-- カートアイテム -->
-      <div class="card">
-        <div id="editable-cart-container"></div>
-      </div>
+			<!-- 画面④：注文完了 -->
+			<div id="complete-view" style="display: none">
+				<div style="text-align: center; padding: 40px 16px">
+					<div style="font-size: 4rem; margin-bottom: 16px">✅</div>
+					<h2 style="color: #10b981; margin-bottom: 24px; font-size: 1.4rem">
+						ご注文ありがとうございます！
+					</h2>
+					<div
+						style="
+							background: #fff;
+							border-radius: 12px;
+							padding: 20px;
+							box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+							text-align: left;
+							margin-bottom: 32px;
+							border: 1px solid #e5e7eb;
+						"
+					>
+						<p
+							style="
+								color: #333;
+								font-size: 1.05rem;
+								line-height: 1.6;
+								margin-top: 0;
+								margin-bottom: 12px;
+								font-weight: bold;
+							"
+						>
+							商品はスクール練習時にお渡しいたします。<br />楽しみにお待ちください！
+						</p>
+						<p style="color: #666; font-size: 0.85rem; line-height: 1.5; margin-bottom: 24px">
+							（お急ぎの場合やご自宅への発送をご希望の方は、お手数ですが公式LINEまでその旨をご連絡ください）
+						</p>
+						<div style="margin-bottom: 20px">
+							<div
+								style="
+									font-size: 0.95rem;
+									font-weight: bold;
+									color: var(--primary-color);
+									margin-bottom: 6px;
+								"
+							>
+								【お支払いについて】
+							</div>
+							<p style="color: #555; font-size: 0.9rem; line-height: 1.6; margin: 0">
+								代金は月会費と合わせて決済させていただきますので、個別のお支払いは不要です。
+							</p>
+						</div>
+						<div>
+							<div
+								style="
+									font-size: 0.95rem;
+									font-weight: bold;
+									color: var(--primary-color);
+									margin-bottom: 6px;
+								"
+							>
+								【お問い合わせ】
+							</div>
+							<p style="color: #555; font-size: 0.9rem; line-height: 1.6; margin: 0">
+								ご不明な点やご質問がございましたら、
+								<strong
+									style="
+										color: #333;
+										background: #f3f4f6;
+										padding: 4px 8px;
+										border-radius: 6px;
+										font-size: 0.95rem;
+										display: inline-block;
+										margin: 4px 0;
+									"
+								>
+									注文ID（#<span id="complete-order-id"></span>）
+								</strong>
+								を添えて公式LINEまでお気軽にご相談ください。
+							</p>
+						</div>
+					</div>
+					<button
+						class="primary-btn"
+						onclick="backToTop()"
+						style="max-width: 300px; margin: 0 auto; display: block"
+					>
+						トップに戻る
+					</button>
+				</div>
+			</div>
+		</div>
+		<!-- /.container -->
 
-      <button class="primary-btn" id="submit-btn" onclick="submitOrder()">注文確定</button>
-      <button class="back-btn"    id="back-btn"   onclick="backToShopping()">買い物を続ける</button>
-    </div>
+		<!-- フローティングカートバー -->
+		<div id="floating-bar" class="floating-bar">
+			<div class="floating-bar-content">
+				<div class="floating-total">
+					カートに
+					<span id="float-count" style="color: #10b981; font-size: 1.3rem">0</span> 点<br />
+					合計 ¥<span id="float-total">0</span>
+				</div>
+				<button class="floating-btn" onclick="goToCart()">カートを見る ＞</button>
+			</div>
+		</div>
 
-    <!-- 画面④：注文完了 -->
-    <div id="complete-view" style="display: none">
-      <div style="text-align: center; padding: 40px 16px">
-        <div style="font-size: 4rem; margin-bottom: 16px">✅</div>
-        <h2 style="color: #10b981; margin-bottom: 24px; font-size: 1.4rem">
-          ご注文ありがとうございます！
-        </h2>
-        <div
-          style="
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            text-align: left;
-            margin-bottom: 32px;
-            border: 1px solid #e5e7eb;
-          "
-        >
-          <p style="color: #333; font-size: 1.05rem; line-height: 1.6; margin-top: 0; margin-bottom: 12px; font-weight: bold;">
-            商品はスクール練習時にお渡しいたします。<br />楽しみにお待ちください！
-          </p>
-          <p style="color: #666; font-size: 0.85rem; line-height: 1.5; margin-bottom: 24px">
-            （お急ぎの場合やご自宅への発送をご希望の方は、お手数ですが公式LINEまでその旨をご連絡ください）
-          </p>
-          <div style="margin-bottom: 20px">
-            <div style="font-size: 0.95rem; font-weight: bold; color: var(--primary-color); margin-bottom: 6px;">
-              【お支払いについて】
-            </div>
-            <p style="color: #555; font-size: 0.9rem; line-height: 1.6; margin: 0">
-              代金は月会費と合わせて決済させていただきますので、個別のお支払いは不要です。
-            </p>
-          </div>
-          <div>
-            <div style="font-size: 0.95rem; font-weight: bold; color: var(--primary-color); margin-bottom: 6px;">
-              【お問い合わせ】
-            </div>
-            <p style="color: #555; font-size: 0.9rem; line-height: 1.6; margin: 0">
-              ご不明な点やご質問がございましたら、
-              <strong style="color: #333; background: #f3f4f6; padding: 4px 8px; border-radius: 6px; font-size: 0.95rem; display: inline-block; margin: 4px 0;">
-                注文ID（#<span id="complete-order-id"></span>）
-              </strong>
-              を添えて公式LINEまでお気軽にご相談ください。
-            </p>
-          </div>
-        </div>
-        <button class="primary-btn" onclick="backToTop()" style="max-width: 300px; margin: 0 auto; display: block">
-          トップに戻る
-        </button>
-      </div>
-    </div>
+		<!-- 商品詳細モーダル -->
+		<div
+			id="product-modal"
+			class="modal-overlay"
+			onclick="if (event.target === this) closeModal();"
+		>
+			<div class="modal-content">
+				<div class="modal-header-sticky">
+					<span class="close-btn" onclick="closeModal()">×</span>
+				</div>
+				<div id="modal-images" class="modal-images"></div>
 
-  </div><!-- /.container -->
+				<h2 id="modal-title" style="margin-top: 0"></h2>
+				<p id="modal-price" class="product-price" style="font-size: 1.4rem; margin: 8px 0"></p>
 
-  <!-- フローティングカートバー -->
-  <div id="floating-bar" class="floating-bar">
-    <div class="floating-bar-content">
-      <div class="floating-total">
-        カートに <span id="float-count" style="color: #10b981; font-size: 1.3rem">0</span> 点<br />
-        合計 ¥<span id="float-total">0</span>
-      </div>
-      <button class="floating-btn" onclick="goToCart()">カートを見る ＞</button>
-    </div>
-  </div>
+				<details class="modal-desc-details">
+					<summary>商品の詳細を見る</summary>
+					<div id="modal-desc" class="modal-desc"></div>
+				</details>
 
-  <!-- 商品詳細モーダル -->
-  <div id="product-modal" class="modal-overlay" onclick="if (event.target === this) closeModal();">
-    <div class="modal-content">
-      <div class="modal-header-sticky">
-        <span class="close-btn" onclick="closeModal()">×</span>
-      </div>
-      <div id="modal-images" class="modal-images"></div>
-      
-      <h2 id="modal-title" style="margin-top: 0"></h2>
-      <p id="modal-price" class="product-price" style="font-size: 1.4rem; margin: 8px 0"></p>
-      
-      <details class="modal-desc-details">
-        <summary>商品の詳細を見る</summary>
-        <div id="modal-desc" class="modal-desc"></div>
-      </details>
+				<div class="form-group" id="modal-variant-group">
+					<label id="modal-variant-label">サイズ / カラー選択</label>
+					<div class="select-group">
+						<div id="modal-size" class="size-btn-group"></div>
+						<div id="modal-color" class="size-btn-group"></div>
+					</div>
+				</div>
+				<div class="form-group">
+					<label id="modal-qty-label">数量</label>
+					<div class="qty-control">
+						<button type="button" onclick="changeModalQty(-1)">-</button>
+						<input type="number" id="modal-qty" value="1" min="1" readonly />
+						<button type="button" onclick="changeModalQty(1)">+</button>
+					</div>
+				</div>
+				<button class="primary-btn" id="modal-add-btn" onclick="addToCart()">カートに入れる</button>
+			</div>
+		</div>
 
-      <div class="form-group" id="modal-variant-group">
-        <label id="modal-variant-label">サイズ / カラー選択</label>
-        <div class="select-group">
-          <div id="modal-size" class="size-btn-group"></div>
-          <div id="modal-color" class="size-btn-group"></div>
-        </div>
-      </div>
-      <div class="form-group">
-        <label id="modal-qty-label">数量</label>
-        <div class="qty-control">
-          <button type="button" onclick="changeModalQty(-1)">-</button>
-          <input type="number" id="modal-qty" value="1" min="1" readonly />
-          <button type="button" onclick="changeModalQty(1)">+</button>
-        </div>
-      </div>
-      <button class="primary-btn" id="modal-add-btn" onclick="addToCart()">カートに入れる</button>
-    </div>
-  </div>
+		<!-- 注文確認モーダル -->
+		<div id="custom-confirm" class="confirm-overlay">
+			<div class="confirm-box">
+				<h3 style="margin: 0; color: #333; font-size: 1.15rem; line-height: 1.5">
+					この内容で注文を確定して<br />よろしいですか？
+				</h3>
+				<div class="confirm-btn-wrap">
+					<button class="confirm-btn confirm-cancel" onclick="closeConfirm()">キャンセル</button>
+					<button class="confirm-btn confirm-ok" onclick="executeSubmitOrder()">OK</button>
+				</div>
+			</div>
+		</div>
 
-  <!-- 注文確認モーダル -->
-  <div id="custom-confirm" class="confirm-overlay">
-    <div class="confirm-box">
-      <h3 style="margin: 0; color: #333; font-size: 1.15rem; line-height: 1.5">
-        この内容で注文を確定して<br />よろしいですか？
-      </h3>
-      <div class="confirm-btn-wrap">
-        <button class="confirm-btn confirm-cancel" onclick="closeConfirm()">キャンセル</button>
-        <button class="confirm-btn confirm-ok"     onclick="executeSubmitOrder()">OK</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- JavaScript（設定 → ユーティリティ → アプリ本体の順に読み込む） -->
-  <script src="js/config.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/app.js"></script>
-
-</body>
+		<!-- JavaScript（設定 → ユーティリティ → アプリ本体の順に読み込む） -->
+		<script src="js/config.js"></script>
+		<script src="js/utils.js"></script>
+		<script src="js/app.js"></script>
+	</body>
 </html>
