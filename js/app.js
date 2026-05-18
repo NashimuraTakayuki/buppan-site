@@ -81,13 +81,24 @@ window.onload = async function () {
 		lineSource = "";
 	}
 
-	// --- スクール一覧を先に取得（スクール別チャンネルIDの判定に必要）---
-	// 返却フォーマット: [{ id, name, lineChannelId }, ...]
+	// --- 初期データを集約エンドポイントで一括取得 ---
+	// getInitialData は { products, schools, discountRate } をまとめて返す
+	// サーバー側で個別に try-catch しているため、一部のシートエラーでも他は受け取れる
 	let schoolData = [];
+	let productsData = [];
+	let discountData = { discountRate: 0 };
+	let productsFetchOk = false; // 元コードの「商品取得Promiseが resolve したか」相当のフラグ
 	try {
-		schoolData = await gasGet("getSchoolList");
+		const initial = await gasGet("getInitialData");
+		schoolData = Array.isArray(initial.schools) ? initial.schools : [];
+		productsData = Array.isArray(initial.products) ? initial.products : [];
+		discountData = initial.discountRate || { discountRate: 0 };
+		productsFetchOk = !initial.productsError;
+		if (initial.productsError) console.warn("[init] products取得エラー:", initial.productsError);
+		if (initial.schoolsError) console.warn("[init] schools取得エラー:", initial.schoolsError);
 	} catch (e) {
-		document.getElementById("loading").innerText = "エラー: スクール情報の取得に失敗しました";
+		document.getElementById("loading").innerText = "エラー: 初期データの取得に失敗しました";
+		console.error("[init] getInitialData failed:", e);
 	}
 
 	// URLパラメータが移行前の「スクール名」だった場合、正規の「スクールID」に変換しておく
@@ -145,33 +156,25 @@ window.onload = async function () {
 		console.warn("[LINE Login] チャンネルIDが取得できないため、自動ログインをスキップします。");
 	}
 
-	// --- ログイン画面を表示（スクール一覧は取得済み）---
+	// --- ログイン画面を表示（初期データはすべて取得済み）---
 	document.getElementById("loading").style.display = "none";
 	document.getElementById("login-view").style.display = "block";
 	initSchoolSelect(schoolData);
 
-	// バックグラウンドで商品データ・割引率を並行取得
-	gasGet("getProductAndInventoryData")
-		.then((products) => {
-			globalProducts = products;
-			isProductLoaded = true;
-			if (document.getElementById("product-list-view").style.display === "block") {
-				initData();
-				updateCartUI();
-			}
-		})
-		.catch((err) => console.error("商品取得エラー:", err));
+	// 商品データを反映（取得済みなので即時セット）
+	// 元コードと挙動を揃える: 取得成功なら配列の中身に関わらず isProductLoaded=true
+	globalProducts = productsData;
+	isProductLoaded = productsFetchOk;
+	if (isProductLoaded && document.getElementById("product-list-view").style.display === "block") {
+		initData();
+		updateCartUI();
+	}
 
-	fetchMemberDiscountRate()
-		.then((rate) => {
-			memberDiscountRate = rate;
-			if (lineUserId && statusEl) {
-				statusEl.textContent = "✓ LINEアカウント連携済み (会員特典: " + rate + "%OFF)";
-			}
-		})
-		.catch(() => {
-			memberDiscountRate = 0;
-		});
+	// 会員割引率を反映（取得済みなので即時セット）
+	memberDiscountRate = typeof discountData.discountRate === "number" ? discountData.discountRate : 0;
+	if (lineUserId && statusEl) {
+		statusEl.textContent = "✓ LINEアカウント連携済み (会員特典: " + memberDiscountRate + "%OFF)";
+	}
 
 	// --- バリデーションイベントの一括登録 ---
 	Object.keys(VALIDATORS).forEach((id) => {

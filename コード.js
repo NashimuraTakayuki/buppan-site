@@ -1,4 +1,65 @@
 // ============================================================
+// 永続キャッシュ（PropertiesService）
+// シートが編集されるまで保持する。
+// - onEdit が編集を検知して該当キャッシュを invalidate
+// - submitOrder は在庫を書き換えた直後に invalidate（onEdit はプログラム書込では発火しないため）
+// - 緊急時は onOpen メニューの「キャッシュを全クリア」で invalidateAllCaches を実行
+// ============================================================
+const CACHE_KEYS = {
+	products: "pcache_products", // 商品一覧（マスタ）
+	inventory: "pcache_inventory", // 商品在庫
+	schools: "pcache_schools", // スクール設定（全行 raw データ）
+	discount: "pcache_discount", // 会員特典情報
+	config: "pcache_config", // システム設定
+};
+
+// シート名 → そのシートが編集されたときに無効化すべきキャッシュキー
+const SHEET_CACHE_MAP = {
+	商品一覧: [CACHE_KEYS.products],
+	商品在庫: [CACHE_KEYS.inventory],
+	スクール設定: [CACHE_KEYS.schools],
+	会員特典情報: [CACHE_KEYS.discount],
+	システム設定: [CACHE_KEYS.config],
+};
+
+/**
+ * 永続キャッシュから値を取得。なければ loader() を実行して保存。
+ * PropertiesService は 1値=9KB 制限があるため、保存失敗時はキャッシュをあきらめて
+ * 生の値を返す（読み取りパスは止めない）。
+ */
+function getPersistent(key, loader) {
+	const props = PropertiesService.getScriptProperties();
+	const cached = props.getProperty(key);
+	if (cached) {
+		try {
+			return JSON.parse(cached);
+		} catch (e) {
+			Logger.log("[cache] JSONパース失敗、キャッシュを破棄: " + key);
+			props.deleteProperty(key);
+		}
+	}
+	const fresh = loader();
+	try {
+		props.setProperty(key, JSON.stringify(fresh));
+	} catch (e) {
+		Logger.log("[cache] put失敗（キャッシュなしで継続）: " + key + " / " + e.message);
+	}
+	return fresh;
+}
+
+function invalidatePersistent(key) {
+	PropertiesService.getScriptProperties().deleteProperty(key);
+	Logger.log("[cache] 無効化: " + key);
+}
+
+function invalidateAllCaches() {
+	Object.values(CACHE_KEYS).forEach(invalidatePersistent);
+	try {
+		SpreadsheetApp.getActiveSpreadsheet().toast("キャッシュを全クリアしました", "🔄", 3);
+	} catch (e) {}
+}
+
+// ============================================================
 // フォールバック設定値（スプレッドシートで管理できない場合のみ使用）
 // 通常はスプレッドシートの「システム設定」シートで管理してください
 // ============================================================
@@ -21,33 +82,35 @@ const CONFIG_DEFAULTS = {
 // シート列構成: 設定キー | 値
 // ============================================================
 function getConfig() {
-	const config = JSON.parse(JSON.stringify(CONFIG_DEFAULTS)); // deep copy
-	try {
-		const ss = SpreadsheetApp.getActiveSpreadsheet();
-		const sheet = ss.getSheetByName("システム設定");
-		if (!sheet) return config;
-		const rows = sheet.getDataRange().getValues();
-		const map = {};
-		rows.forEach((row) => {
-			const key = String(row[0]).trim();
-			const val = String(row[1]).trim();
-			if (key && val) map[key] = val;
-		});
-		const ov = (path, obj) => {
-			const keys = path.split(".");
-			let cur = obj;
-			for (let i = 0; i < keys.length - 1; i++) cur = cur[keys[i]];
-			if (map[path]) cur[keys[keys.length - 1]] = map[path];
-		};
-		ov("lineLogin.channelId", config);
-		ov("lineLogin.channelSecret", config);
-		ov("lineLogin.redirectUri", config);
-		ov("defaultNotification.messagingApiToken", config);
-		ov("defaultNotification.adminLineUserId", config);
-	} catch (e) {
-		Logger.log("[getConfig] シート読み込みエラー（デフォルト値を使用）: " + e.message);
-	}
-	return config;
+	return getPersistent(CACHE_KEYS.config, function () {
+		const config = JSON.parse(JSON.stringify(CONFIG_DEFAULTS)); // deep copy
+		try {
+			const ss = SpreadsheetApp.getActiveSpreadsheet();
+			const sheet = ss.getSheetByName("システム設定");
+			if (!sheet) return config;
+			const rows = sheet.getDataRange().getValues();
+			const map = {};
+			rows.forEach((row) => {
+				const key = String(row[0]).trim();
+				const val = String(row[1]).trim();
+				if (key && val) map[key] = val;
+			});
+			const ov = (path, obj) => {
+				const keys = path.split(".");
+				let cur = obj;
+				for (let i = 0; i < keys.length - 1; i++) cur = cur[keys[i]];
+				if (map[path]) cur[keys[keys.length - 1]] = map[path];
+			};
+			ov("lineLogin.channelId", config);
+			ov("lineLogin.channelSecret", config);
+			ov("lineLogin.redirectUri", config);
+			ov("defaultNotification.messagingApiToken", config);
+			ov("defaultNotification.adminLineUserId", config);
+		} catch (e) {
+			Logger.log("[getConfig] シート読み込みエラー（デフォルト値を使用）: " + e.message);
+		}
+		return config;
+	});
 }
 
 // 後方互換: 既存コードが CONFIG.xxx を参照できるようエイリアスを提供
@@ -98,6 +161,9 @@ function doGet(e) {
 	let result;
 	try {
 		switch (action) {
+			case "getInitialData":
+				result = getInitialData();
+				break;
 			case "getProductAndInventoryData":
 				result = getProductAndInventoryData();
 				break;
@@ -168,11 +234,8 @@ function doPost(e) {
 // ----------------------------------------------------
 function getSchoolLoginConfig(schoolId) {
 	try {
-		const ss = SpreadsheetApp.getActiveSpreadsheet();
-		const sheet = ss.getSheetByName("スクール設定");
-		if (!sheet) return {};
-		const data = sheet.getDataRange().getValues();
-		const headers = data[0];
+		const { headers, rows } = getSchoolSettingsRaw();
+		if (rows.length === 0) return {};
 		const idIdx = headers.indexOf("スクールID");
 		const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
 		const channelSecretIdx = headers.indexOf("LINEログインチャンネルシークレット");
@@ -182,10 +245,10 @@ function getSchoolLoginConfig(schoolId) {
 			// schoolIdが空の場合はフォールバックせず空を返す（CONFIG_DEFAULTSに委ねる）
 			return {};
 		}
-		for (let i = 1; i < data.length; i++) {
-			if (String(data[i][idIdx]).trim() === target) {
-				const channelId = String(data[i][channelIdIdx]).trim();
-				const channelSecret = String(data[i][channelSecretIdx]).trim();
+		for (let i = 0; i < rows.length; i++) {
+			if (String(rows[i][idIdx]).trim() === target) {
+				const channelId = String(rows[i][channelIdIdx]).trim();
+				const channelSecret = String(rows[i][channelSecretIdx]).trim();
 				if (channelId && channelSecret) return { channelId, channelSecret };
 			}
 		}
@@ -246,20 +309,32 @@ function getLineUserIdFromCode(code, schoolId) {
 }
 
 // ----------------------------------------------------
+// スクール設定シートの全行 raw データを永続キャッシュから取得
+// getSchoolList / getSchoolConfig の共通基盤
+// 返却: { headers: string[], rows: any[][] }
+// ----------------------------------------------------
+function getSchoolSettingsRaw() {
+	return getPersistent(CACHE_KEYS.schools, function () {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
+		const sheet = ss.getSheetByName("スクール設定");
+		if (!sheet) {
+			writeLog("ERROR", "getSchoolSettingsRaw", "スクール設定シートが見つかりません");
+			return { headers: [], rows: [] };
+		}
+		const data = sheet.getDataRange().getValues();
+		if (data.length === 0) return { headers: [], rows: [] };
+		return { headers: data[0], rows: data.slice(1) };
+	});
+}
+
+// ----------------------------------------------------
 // スクール一覧をフロントエンドに渡す関数（スクール設定シートから取得）
 // 返却フォーマット: [{ id, name, lineChannelId }, ...]
 // ----------------------------------------------------
 function getSchoolList() {
 	Logger.log("[getSchoolList] 開始");
-	const ss = SpreadsheetApp.getActiveSpreadsheet();
-	const sheet = ss.getSheetByName("スクール設定");
-	if (!sheet) {
-		writeLog("ERROR", "getSchoolList", "スクール設定シートが見つかりません");
-		return [];
-	}
-	const data = sheet.getDataRange().getValues();
-	if (data.length <= 1) return [];
-	const headers = data[0];
+	const { headers, rows } = getSchoolSettingsRaw();
+	if (rows.length === 0) return [];
 	const nameIdx = headers.indexOf("スクール名");
 	const idIdx = headers.indexOf("スクールID");
 	const channelIdIdx = headers.indexOf("LINEログインチャンネルID");
@@ -267,8 +342,7 @@ function getSchoolList() {
 		writeLog("ERROR", "getSchoolList", "スクール設定シートに「スクール名」列が見つかりません");
 		return [];
 	}
-	const schools = data
-		.slice(1)
+	const schools = rows
 		.filter((row) => String(row[nameIdx]).trim().length > 0)
 		.map((row) => ({
 			id: idIdx !== -1 ? String(row[idIdx]).trim() : "",
@@ -317,11 +391,10 @@ function logInventoryChange(sku, before, after, reason, relatedId, changedBy) {
 }
 
 // ----------------------------------------------------
-// フロントエンドに商品と在庫の統合データを渡す関数
+// 商品一覧（マスタ）を永続キャッシュから取得
 // ----------------------------------------------------
-function getProductAndInventoryData() {
-	try {
-		Logger.log("[getProductAndInventoryData] 開始");
+function getProductsMaster() {
+	return getPersistent(CACHE_KEYS.products, function () {
 		const ss = SpreadsheetApp.getActiveSpreadsheet();
 		const productSheet = ss.getSheetByName("商品一覧");
 		if (!productSheet) throw new Error("「商品一覧」シートが見つかりません。");
@@ -332,12 +405,22 @@ function getProductAndInventoryData() {
 		const products = [];
 		productData.forEach((row) => {
 			if (displayIdx !== -1 && row[displayIdx] !== "表示") return;
-			let obj = {};
+			const obj = {};
 			productHeaders.forEach((header, i) => (obj[header] = row[i]));
 			products.push(obj);
 		});
-		Logger.log("[getProductAndInventoryData] 掲載商品数: " + products.length);
+		Logger.log("[getProductsMaster] 掲載商品数: " + products.length);
+		return products;
+	});
+}
 
+// ----------------------------------------------------
+// 商品在庫を永続キャッシュから取得
+// onEdit（手動編集）と submitOrder（注文時の引き当て）の両方で invalidate される
+// ----------------------------------------------------
+function getInventoryData() {
+	return getPersistent(CACHE_KEYS.inventory, function () {
+		const ss = SpreadsheetApp.getActiveSpreadsheet();
 		const inventorySheet = ss.getSheetByName("商品在庫");
 		if (!inventorySheet) throw new Error("「商品在庫」シートが見つかりません。");
 		const inventoryData = inventorySheet.getDataRange().getValues();
@@ -345,19 +428,78 @@ function getProductAndInventoryData() {
 		const inventoryHeaders = inventoryData.shift();
 
 		const inventory = inventoryData.map((row) => {
-			let obj = {};
+			const obj = {};
 			inventoryHeaders.forEach((header, i) => (obj[header] = row[i]));
 			return obj;
 		});
+		Logger.log("[getInventoryData] 在庫件数: " + inventory.length);
+		return inventory;
+	});
+}
 
-		products.forEach((product) => {
-			product.stockList = inventory.filter(
-				(inv) => String(inv["商品ID"]) === String(product["商品ID"]),
-			);
+// ----------------------------------------------------
+// 集約エンドポイント：初回ページロードに必要な全データを1リクエストで返す
+// 個別エンドポイント（getProductAndInventoryData / getSchoolList / getMemberDiscountRate）も
+// 後方互換のため残してある
+//
+// 耐障害性: 1つの取得が失敗しても他は返せるよう個別にtry-catchする
+// （元の app.js は schools 取得失敗以外は非ブロッキングだった挙動を維持）
+// ----------------------------------------------------
+function getInitialData() {
+	const result = {
+		products: [],
+		schools: [],
+		discountRate: { discountRate: 0 },
+	};
+	try {
+		result.products = getProductAndInventoryData();
+	} catch (e) {
+		Logger.log("[getInitialData] products取得エラー（空配列で継続）: " + e.message);
+		result.productsError = e.message;
+	}
+	try {
+		result.schools = getSchoolList();
+	} catch (e) {
+		Logger.log("[getInitialData] schools取得エラー: " + e.message);
+		result.schoolsError = e.message;
+	}
+	try {
+		result.discountRate = getMemberDiscountRate();
+	} catch (e) {
+		Logger.log("[getInitialData] discount取得エラー: " + e.message);
+		result.discountRateError = e.message;
+	}
+	return result;
+}
+
+// ----------------------------------------------------
+// フロントエンドに商品と在庫の統合データを渡す関数
+// 商品マスタと在庫を別キャッシュで持ち、結合は毎回 Map ベースで行う（O(P+I)）
+// 結合時は Object.assign でシャローコピー → キャッシュオブジェクトの汚染を防止
+// ----------------------------------------------------
+function getProductAndInventoryData() {
+	try {
+		Logger.log("[getProductAndInventoryData] 開始");
+		const products = getProductsMaster();
+		const inventory = getInventoryData();
+
+		// 商品ID → 在庫リスト の Map を構築（O(I)）
+		const inventoryByProductId = new Map();
+		inventory.forEach((inv) => {
+			const id = String(inv["商品ID"]);
+			if (!inventoryByProductId.has(id)) inventoryByProductId.set(id, []);
+			inventoryByProductId.get(id).push(inv);
 		});
 
+		// 結合（O(P)）。Object.assign でシャローコピーしてキャッシュを汚染しない
+		const merged = products.map((p) =>
+			Object.assign({}, p, {
+				stockList: inventoryByProductId.get(String(p["商品ID"])) || [],
+			}),
+		);
+
 		Logger.log("[getProductAndInventoryData] 完了");
-		return JSON.parse(JSON.stringify(products));
+		return merged;
 	} catch (e) {
 		Logger.log("[getProductAndInventoryData] エラー: " + e.message);
 		throw e;
@@ -486,6 +628,8 @@ function submitOrder(payload) {
 				payload.customerInfo.email,
 			);
 		});
+		// 在庫キャッシュを無効化（onEdit はプログラム書込では発火しないため明示的に呼ぶ）
+		invalidatePersistent(CACHE_KEYS.inventory);
 		Logger.log("[submitOrder] 在庫引き当て完了");
 
 		// 4. 購入履歴への一括書き込み
@@ -769,6 +913,8 @@ function generateSKUs(isAuto) {
 		inventorySheet
 			.getRange(inventorySheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
 			.setValues(newRows);
+		// 商品在庫シートにプログラム書き込みしたので在庫キャッシュを無効化
+		invalidatePersistent(CACHE_KEYS.inventory);
 		if (!isAutoRun) {
 			SpreadsheetApp.getUi().alert(
 				`${newRows.length}件の新しいSKUを追加しました。\n在庫数を入力してください。`,
@@ -808,21 +954,23 @@ function generateSKUs(isAuto) {
 // 「会員特典情報」シートの B1 セルの値（数値）を返す
 // ----------------------------------------------------
 function getMemberDiscountRate() {
-	try {
-		const ss = SpreadsheetApp.getActiveSpreadsheet();
-		const sheet = ss.getSheetByName("会員特典情報");
-		if (!sheet) {
-			Logger.log("[getMemberDiscountRate] 会員特典情報シートが見つかりません");
+	return getPersistent(CACHE_KEYS.discount, function () {
+		try {
+			const ss = SpreadsheetApp.getActiveSpreadsheet();
+			const sheet = ss.getSheetByName("会員特典情報");
+			if (!sheet) {
+				Logger.log("[getMemberDiscountRate] 会員特典情報シートが見つかりません");
+				return { discountRate: 0 };
+			}
+			const value = sheet.getRange("B1").getValue();
+			const rate = parseFloat(String(value));
+			Logger.log("[getMemberDiscountRate] 割引率: " + rate);
+			return { discountRate: isNaN(rate) ? 0 : rate };
+		} catch (e) {
+			Logger.log("[getMemberDiscountRate] エラー: " + e.message);
 			return { discountRate: 0 };
 		}
-		const value = sheet.getRange("B1").getValue();
-		const rate = parseFloat(String(value));
-		Logger.log("[getMemberDiscountRate] 割引率: " + rate);
-		return { discountRate: isNaN(rate) ? 0 : rate };
-	} catch (e) {
-		Logger.log("[getMemberDiscountRate] エラー: " + e.message);
-		return { discountRate: 0 };
-	}
+	});
 }
 
 // ----------------------------------------------------
@@ -896,19 +1044,14 @@ function getSchoolConfig(identifier) {
 	const DEFAULT_ADMIN_ID = CONFIG.defaultNotification.adminLineUserId;
 
 	try {
-		const ss = SpreadsheetApp.getActiveSpreadsheet();
-		const sheet = ss.getSheetByName("スクール設定");
-		if (!sheet) {
+		const { headers, rows } = getSchoolSettingsRaw();
+		if (rows.length === 0) {
 			Logger.log(
-				"[getSchoolConfig] スクール設定シートが見つかりません。デフォルト設定を使用します。",
+				"[getSchoolConfig] スクール設定が空です。デフォルト設定を使用します。",
 			);
 			return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
 		}
 
-		const data = sheet.getDataRange().getValues();
-		if (data.length <= 1) return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
-
-		const headers = data[0];
 		const idIdx = headers.indexOf("スクールID");
 		const nameIdx = headers.indexOf("スクール名");
 		const tokenIdx = headers.indexOf("Messaging_API_Token");
@@ -924,18 +1067,18 @@ function getSchoolConfig(identifier) {
 		const target = String(identifier || "").trim();
 		if (!target) return { token: DEFAULT_TOKEN, adminId: DEFAULT_ADMIN_ID };
 
-		const matchRow = (i) => {
-			const token = String(data[i][tokenIdx]).trim();
-			const adminId = String(data[i][adminIdx]).trim();
+		const matchRow = (row) => {
+			const token = String(row[tokenIdx]).trim();
+			const adminId = String(row[adminIdx]).trim();
 			if (token && adminId) return { token, adminId };
 			return null;
 		};
 
 		// 1. まず スクールID 列で検索
 		if (idIdx !== -1) {
-			for (let i = 1; i < data.length; i++) {
-				if (String(data[i][idIdx]).trim() === target) {
-					const result = matchRow(i);
+			for (let i = 0; i < rows.length; i++) {
+				if (String(rows[i][idIdx]).trim() === target) {
+					const result = matchRow(rows[i]);
 					if (result) {
 						Logger.log("[getSchoolConfig] スクールID「" + target + "」の設定を取得しました。");
 						return result;
@@ -945,9 +1088,9 @@ function getSchoolConfig(identifier) {
 		}
 
 		// 2. スクール名 列にフォールバック（顧客情報のスクール名で検索する場合）
-		for (let i = 1; i < data.length; i++) {
-			if (String(data[i][nameIdx]).trim() === target) {
-				const result = matchRow(i);
+		for (let i = 0; i < rows.length; i++) {
+			if (String(rows[i][nameIdx]).trim() === target) {
+				const result = matchRow(rows[i]);
 				if (result) {
 					Logger.log("[getSchoolConfig] スクール名「" + target + "」の設定を取得しました。");
 					return result;
@@ -1005,6 +1148,14 @@ function onEdit(e) {
 	if (!e || !e.range) return;
 	const sheet = e.range.getSheet();
 	const sheetName = sheet.getName();
+
+	// 編集されたシートに対応する永続キャッシュを無効化
+	// （SKU自動展開や在庫変更ログの処理よりも先に実行することで、
+	//  もし以降の処理で例外が出ても少なくともキャッシュは破棄されている状態にする）
+	const cacheKeys = SHEET_CACHE_MAP[sheetName];
+	if (cacheKeys) {
+		cacheKeys.forEach(invalidatePersistent);
+	}
 
 	// 商品一覧シートが編集された場合はSKUを自動展開
 	if (sheetName === "商品一覧") {
@@ -1140,6 +1291,8 @@ function onOpen() {
 		.addItem("SKUを在庫シートに自動展開", "generateSKUs")
 		.addSeparator()
 		.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
+		.addSeparator()
+		.addItem("🔄 キャッシュを全クリア", "invalidateAllCaches")
 		.addToUi();
 }
 
