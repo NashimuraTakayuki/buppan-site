@@ -7,7 +7,7 @@
 const GAS_URL =
 	"https://script.google.com/macros/s/AKfycbzi7X-uyxvxDIQyiwGeaYyyM_ks6aSvpmJs8uj3jcv8RcPf78cANXWH14L7h2SZY7RkZg/exec";
 
-/** LINE Login コールバックURL（Netlifyのデプロイ先に合わせる） */
+/** LINE Login コールバックURL（Cloudflare Pages のデプロイ先に合わせる） */
 const REDIRECT_URI = "https://buppan-site.weathered-hill-1bba.workers.dev/";
 
 /**
