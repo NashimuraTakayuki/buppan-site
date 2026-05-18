@@ -3,5 +3,6 @@
 
 # 以下のファイルのみアップロードを許可（アップロード対象外から除外する）
 !コード.js
+!tests.js
 !upload-dialog.html
 !appsscript.json
