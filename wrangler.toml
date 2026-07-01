@@ -1,0 +1,12 @@
+name = "buppan-catalog-api"
+main = "workers/catalog-worker.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+# Add the KV binding after creating the namespace in Cloudflare.
+# Keeping this file deployable without a placeholder ID prevents
+# `npx wrangler versions upload` from failing before the namespace exists.
+
+[[kv_namespaces]]
+binding = "PUBLIC_CATALOG_KV"
+id = "3f5170965b6643ccbba3d03146287ea4"

@@ -10,6 +10,19 @@ const GAS_URL =
 /** LINE Login コールバックURL（Cloudflare Pages のデプロイ先に合わせる） */
 const REDIRECT_URI = "https://buppan-site.weathered-hill-1bba.workers.dev/";
 
+/** Cloudflare KV カタログAPI（同一ドメインの Worker route を想定） */
+const PUBLIC_CATALOG_URL = "https://buppan-catalog-api.weathered-hill-1bba.workers.dev/catalog";
+
+/**
+ * KVカタログ切替フラグ。
+ * true にすると PUBLIC_CATALOG_URL を優先し、失敗時は従来の GAS getInitialData に戻る。
+ */
+// const USE_KV_CATALOG = false;
+const USE_KV_CATALOG = true;
+
+/** KVカタログ取得のタイムアウト（ms） */
+const CATALOG_FETCH_TIMEOUT_MS = 2500;
+
 /**
  * LINE Login 認証URL を生成する
  * channelId はスプレッドシートの「スクール設定」シートの

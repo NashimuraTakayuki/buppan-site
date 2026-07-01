@@ -12,11 +12,204 @@ let customerInfo = { email: "", school: "", memberName: "" };
 let currentCategory = "すべて";
 let isProductLoaded = false; // 商品データ取得完了フラグ
 let memberDiscountRate = 0; // 会員特典情報シートから取得した割引率（%）
+let currentCatalogVersion = ""; // Cloudflare KV カタログのバージョン
+
+// ---- 初期表示速度の一時計測（URLに ?perf=1 を付けた時だけ有効）----
+const PERF_ENABLED_KEY = "aslish_perf_enabled";
+const PERF_LINE_AUTH_START_KEY = "aslish_perf_line_auth_start";
+const perfState = createPerfState();
+perfMark("scriptStart");
+
+function createPerfState() {
+	const state = {
+		enabled: false,
+		marks: {},
+		wallMarks: {},
+		details: {},
+	};
+	try {
+		const params = new URLSearchParams(window.location.search);
+		if (params.get("perf") === "1") {
+			sessionStorage.setItem(PERF_ENABLED_KEY, "1");
+			state.enabled = true;
+		} else if (params.get("perf") === "0") {
+			sessionStorage.removeItem(PERF_ENABLED_KEY);
+			sessionStorage.removeItem(PERF_LINE_AUTH_START_KEY);
+		} else {
+			state.enabled = sessionStorage.getItem(PERF_ENABLED_KEY) === "1";
+		}
+	} catch (e) {
+		state.enabled = false;
+	}
+	return state;
+}
+
+function perfMark(name) {
+	if (!perfState.enabled) return;
+	perfState.marks[name] = performance.now();
+	perfState.wallMarks[name] = Date.now();
+}
+
+function perfDetail(name, value) {
+	if (!perfState.enabled) return;
+	perfState.details[name] = value;
+}
+
+function perfDuration(startName, endName) {
+	const start = perfState.marks[startName];
+	const end = perfState.marks[endName];
+	if (typeof start !== "number" || typeof end !== "number") return null;
+	return end - start;
+}
+
+function perfWallDuration(startMs, endMs) {
+	if (typeof startMs !== "number" || typeof endMs !== "number") return null;
+	return endMs - startMs;
+}
+
+function perfRememberLineAuthStart() {
+	if (!perfState.enabled) return;
+	sessionStorage.setItem(PERF_LINE_AUTH_START_KEY, String(Date.now()));
+}
+
+function perfReadLineAuthStart() {
+	if (!perfState.enabled) return null;
+	const value = Number(sessionStorage.getItem(PERF_LINE_AUTH_START_KEY));
+	return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function perfFormatMs(value) {
+	return typeof value === "number" && Number.isFinite(value) ? Math.round(value) + "ms" : "-";
+}
+
+function showPerfOverlay() {
+	if (!perfState.enabled || !document.body) return;
+	perfMark("ready");
+
+	const existing = document.getElementById("perf-overlay");
+	if (existing) existing.remove();
+
+	const navigationStart =
+		typeof performance.timeOrigin === "number" ? performance.timeOrigin : Date.now() - performance.now();
+	const lineAuthStart = perfReadLineAuthStart();
+	const lineAuthEnd = perfState.wallMarks.lineAuthEnd || null;
+	const catalogSource = perfState.details.catalogSource || "unknown";
+	const catalogVersion = perfState.details.catalogVersion || "-";
+	const rows = [
+		"total: " + perfFormatMs(perfState.wallMarks.ready - navigationStart),
+		"catalog(" + catalogSource + "): " + perfFormatMs(perfDuration("catalogStart", "catalogEnd")),
+		"LINE total: " + perfFormatMs(perfWallDuration(lineAuthStart, lineAuthEnd)),
+		"LINE redirect: " + perfFormatMs(perfWallDuration(lineAuthStart, perfState.wallMarks.scriptStart)),
+		"LINE code exchange: " + perfFormatMs(perfDuration("lineExchangeStart", "lineExchangeEnd")),
+		"catalog version: " + catalogVersion,
+	];
+
+	const overlay = document.createElement("div");
+	overlay.id = "perf-overlay";
+	overlay.style.cssText =
+		"position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;" +
+		"padding:10px 38px 10px 10px;background:rgba(0,0,0,.82);color:#fff;" +
+		"font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;" +
+		"border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25);";
+
+	const closeButton = document.createElement("button");
+	closeButton.type = "button";
+	closeButton.textContent = "×";
+	closeButton.setAttribute("aria-label", "計測表示を閉じる");
+	closeButton.style.cssText =
+		"position:absolute;right:8px;top:8px;width:24px;height:24px;border:0;border-radius:4px;" +
+		"background:#fff;color:#111;font-size:16px;line-height:24px;padding:0;";
+	closeButton.addEventListener("click", () => {
+		sessionStorage.removeItem(PERF_ENABLED_KEY);
+		sessionStorage.removeItem(PERF_LINE_AUTH_START_KEY);
+		overlay.remove();
+	});
+	overlay.appendChild(closeButton);
+
+	rows.forEach((row) => {
+		const line = document.createElement("div");
+		line.textContent = row;
+		overlay.appendChild(line);
+	});
+
+	document.body.appendChild(overlay);
+	if (lineAuthEnd) sessionStorage.removeItem(PERF_LINE_AUTH_START_KEY);
+}
 
 // ============================================================
 // 初期化（ページ読み込み時）
 // ============================================================
+
+async function fetchJsonWithTimeout(url, timeoutMs) {
+	const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+	const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+	try {
+		const res = await fetch(url, {
+			cache: "no-store",
+			signal: controller ? controller.signal : undefined,
+		});
+		if (!res.ok) throw new Error("HTTP " + res.status);
+		return await res.json();
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+function normalizeInitialPayload(payload, options = {}) {
+	const strict = options.strict === true;
+	if (!payload || typeof payload !== "object") {
+		throw new Error("初期データの形式が不正です");
+	}
+	if (strict && !Array.isArray(payload.products)) {
+		throw new Error("KVカタログに products がありません");
+	}
+	if (strict && !Array.isArray(payload.schools)) {
+		throw new Error("KVカタログに schools がありません");
+	}
+
+	let discountRate = payload.discountRate;
+	if (typeof discountRate === "number") {
+		discountRate = { discountRate };
+	}
+	if (!discountRate || typeof discountRate !== "object") {
+		discountRate = { discountRate: 0 };
+	}
+
+	return {
+		products: Array.isArray(payload.products) ? payload.products : [],
+		schools: Array.isArray(payload.schools) ? payload.schools : [],
+		discountRate,
+		productsError: payload.productsError || "",
+		schoolsError: payload.schoolsError || "",
+		discountRateError: payload.discountRateError || "",
+		catalogVersion: payload.version || payload.catalogVersion || "",
+		generatedAt: payload.generatedAt || "",
+		source: options.source || "gas",
+	};
+}
+
+async function loadInitialAppData() {
+	const useKvCatalog = typeof USE_KV_CATALOG !== "undefined" && USE_KV_CATALOG;
+	if (useKvCatalog) {
+		try {
+			const timeoutMs =
+				typeof CATALOG_FETCH_TIMEOUT_MS !== "undefined" ? CATALOG_FETCH_TIMEOUT_MS : 2500;
+			const catalog = await fetchJsonWithTimeout(PUBLIC_CATALOG_URL, timeoutMs);
+			perfDetail("catalogSource", "kv");
+			return normalizeInitialPayload(catalog, { strict: true, source: "kv" });
+		} catch (e) {
+			console.warn("[init] KVカタログ取得に失敗。GASへフォールバックします:", e);
+			perfDetail("catalogSource", "gas-fallback");
+		}
+	}
+
+	const initial = await gasGet("getInitialData");
+	if (!perfState.details.catalogSource) perfDetail("catalogSource", "gas");
+	return normalizeInitialPayload(initial, { source: "gas" });
+}
+
 window.onload = async function () {
+	perfMark("onloadStart");
 	// --- LocalStorage からお客様情報を復元 ---
 	const savedCustomer = localStorage.getItem("aslish_customer");
 	if (savedCustomer) {
@@ -40,6 +233,7 @@ window.onload = async function () {
 	const params = new URLSearchParams(window.location.search);
 	const lineCode = params.get("code");
 	const isLineApp = /Line\//.test(navigator.userAgent);
+	if (lineCode) perfMark("lineAuthCallback");
 
 	// --- アクセス元スクールIDの取得（LIFFリンクに ?source=<スクールID> を付与して使用）---
 	// LIFFを経由するとクエリパラメータが liff.state に包まれるため両方チェックする
@@ -89,14 +283,19 @@ window.onload = async function () {
 	let discountData = { discountRate: 0 };
 	let productsFetchOk = false; // 元コードの「商品取得Promiseが resolve したか」相当のフラグ
 	try {
-		const initial = await gasGet("getInitialData");
-		schoolData = Array.isArray(initial.schools) ? initial.schools : [];
-		productsData = Array.isArray(initial.products) ? initial.products : [];
-		discountData = initial.discountRate || { discountRate: 0 };
+		perfMark("catalogStart");
+		const initial = await loadInitialAppData();
+		perfMark("catalogEnd");
+		schoolData = initial.schools;
+		productsData = initial.products;
+		discountData = initial.discountRate;
+		currentCatalogVersion = initial.catalogVersion || "";
+		perfDetail("catalogVersion", currentCatalogVersion || "-");
 		productsFetchOk = !initial.productsError;
 		if (initial.productsError) console.warn("[init] products取得エラー:", initial.productsError);
 		if (initial.schoolsError) console.warn("[init] schools取得エラー:", initial.schoolsError);
 	} catch (e) {
+		perfMark("catalogEnd");
 		document.getElementById("loading").innerText = "エラー: 初期データの取得に失敗しました";
 		console.error("[init] getInitialData failed:", e);
 	}
@@ -111,6 +310,7 @@ window.onload = async function () {
 	}
 
 	if (lineCode) {
+		perfMark("lineExchangeStart");
 		try {
 			// スクールIDを渡してGAS側で正しいチャンネルのシークレットを使って交換
 			const data = await gasPost("exchangeLineCode", { code: lineCode, schoolId: lineSource });
@@ -122,6 +322,9 @@ window.onload = async function () {
 		} catch (e) {
 			console.error("LINE code exchange failed:", e);
 			alert("LINE code exchange failed: " + e.message);
+		} finally {
+			perfMark("lineExchangeEnd");
+			perfMark("lineAuthEnd");
 		}
 		// URL から code を除去
 		history.replaceState({}, "", window.location.pathname);
@@ -150,6 +353,8 @@ window.onload = async function () {
 			((schoolData || []).find((s) => s && s.lineChannelId) || {}).lineChannelId;
 		if (channelId) {
 			// lineSource を state パラメータに埋め込んでリダイレクト後も確実に復元できるようにする
+			perfMark("lineAuthStart");
+			perfRememberLineAuthStart();
 			window.location.href = buildLineAuthUrl(channelId, lineSource);
 			return;
 		}
@@ -189,6 +394,7 @@ window.onload = async function () {
 			});
 		}
 	});
+	showPerfOverlay();
 };
 
 // ============================================================
