@@ -9,4 +9,4 @@ workers_dev = true
 
 [[kv_namespaces]]
 binding = "PUBLIC_CATALOG_KV"
-id = "buppan-public-catalog"
+id = "3f5170965b6643ccbba3d03146287ea4"
