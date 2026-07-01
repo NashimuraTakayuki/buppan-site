@@ -399,6 +399,50 @@ function runAllTests() {
 		if (rateDiff) throw new Error(rateDiff);
 	});
 
+	runTest("【KV】buildPublicCatalogSnapshot() が公開カタログ形式を返す", () => {
+		if (typeof buildPublicCatalogSnapshot !== "function") {
+			skip("buildPublicCatalogSnapshot が未実装");
+		}
+		clearAllCaches();
+		const snapshot = normalizeForComparison(buildPublicCatalogSnapshot());
+		assert(snapshot.schemaVersion === 1, "schemaVersion が 1 ではありません");
+		assert(typeof snapshot.version === "string" && snapshot.version.length > 0, "version が空です");
+		assert(
+			typeof snapshot.generatedAt === "string" && snapshot.generatedAt.length > 0,
+			"generatedAt が空です",
+		);
+		const productDiff = diffDescription(loadSnapshot("products"), snapshot.products, "catalog.products");
+		if (productDiff) throw new Error(productDiff);
+		const schoolDiff = diffDescription(loadSnapshot("schools"), snapshot.schools, "catalog.schools");
+		if (schoolDiff) throw new Error(schoolDiff);
+		const rateDiff = diffDescription(
+			loadSnapshot("discountRate"),
+			snapshot.discountRate,
+			"catalog.discountRate",
+		);
+		if (rateDiff) throw new Error(rateDiff);
+	});
+
+	runTest("【KV】公開カタログ検証が秘密情報キーを拒否する", () => {
+		if (typeof validatePublicCatalogSnapshot !== "function") {
+			skip("validatePublicCatalogSnapshot が未実装");
+		}
+		let rejected = false;
+		try {
+			validatePublicCatalogSnapshot({
+				schemaVersion: 1,
+				version: "test",
+				generatedAt: new Date().toISOString(),
+				products: [],
+				schools: [{ id: "s001", name: "テスト", Messaging_API_Token: "secret" }],
+				discountRate: { discountRate: 0 },
+			});
+		} catch (e) {
+			rejected = true;
+		}
+		assert(rejected, "秘密情報キーを含むカタログが拒否されませんでした");
+	});
+
 	// --- キャッシュ動作テスト ---
 	runTest("【キャッシュ】2回目の呼び出しが1回目より速い（キャッシュヒット）", () => {
 		// 揺らぎを抑えるため複数回の中央値で比較する

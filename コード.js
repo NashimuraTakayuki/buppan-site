@@ -22,6 +22,24 @@ const SHEET_CACHE_MAP = {
 	システム設定: [CACHE_KEYS.config],
 };
 
+const PUBLIC_CATALOG_KV = {
+	liveKey: "publicCatalog:v1",
+	stagingKey: "publicCatalog:staging",
+	backupPrefix: "publicCatalog:backup:",
+	dirtyKey: "publicCatalog.dirty",
+	dirtyReasonKey: "publicCatalog.dirtyReason",
+	dirtyAtKey: "publicCatalog.dirtyAt",
+	lastPublishedAtKey: "publicCatalog.lastPublishedAt",
+	lastPublishedVersionKey: "publicCatalog.lastPublishedVersion",
+};
+
+const PUBLIC_CATALOG_SHEETS = {
+	商品一覧: true,
+	商品在庫: true,
+	スクール設定: true,
+	会員特典情報: true,
+};
+
 /**
  * 永続キャッシュから値を取得。なければ loader() を実行して保存。
  * PropertiesService は 1値=9KB 制限があるため、保存失敗時はキャッシュをあきらめて
@@ -513,6 +531,250 @@ function getProductAndInventoryData() {
 }
 
 // ----------------------------------------------------
+// Cloudflare KV 公開カタログ連携
+// 表示高速化用の公開JSONだけをKVへ同期する。注文確定時の最新在庫チェックは
+// 従来どおり submitOrder 内でスプレッドシートを直接確認する。
+// ----------------------------------------------------
+function buildPublicCatalogSnapshot() {
+	const now = new Date();
+	const version =
+		Utilities.formatDate(now, "Asia/Tokyo", "yyyyMMddHHmmss") +
+		"-" +
+		Utilities.getUuid().split("-")[0];
+	const snapshot = {
+		schemaVersion: 1,
+		version,
+		generatedAt: now.toISOString(),
+		products: getProductAndInventoryData(),
+		schools: getSchoolList(),
+		discountRate: getMemberDiscountRate(),
+	};
+	validatePublicCatalogSnapshot(snapshot);
+	return snapshot;
+}
+
+function validatePublicCatalogSnapshot(snapshot) {
+	if (!snapshot || typeof snapshot !== "object") {
+		throw new Error("公開カタログがオブジェクトではありません");
+	}
+	if (!Array.isArray(snapshot.products)) {
+		throw new Error("公開カタログに products がありません");
+	}
+	if (!Array.isArray(snapshot.schools)) {
+		throw new Error("公開カタログに schools がありません");
+	}
+	if (!snapshot.discountRate || typeof snapshot.discountRate !== "object") {
+		throw new Error("公開カタログに discountRate がありません");
+	}
+
+	const forbiddenKeys = {
+		LINEログインチャンネルシークレット: true,
+		Messaging_API_Token: true,
+		管理者LINE_UserID: true,
+		channelSecret: true,
+		messagingApiToken: true,
+		adminLineUserId: true,
+		adminId: true,
+		メールアドレス: true,
+		"LINE UserID": true,
+	};
+	const scan = (value, path) => {
+		if (Array.isArray(value)) {
+			value.forEach((item, index) => scan(item, path + "[" + index + "]"));
+			return;
+		}
+		if (!value || typeof value !== "object") return;
+		Object.keys(value).forEach((key) => {
+			if (forbiddenKeys[key]) {
+				throw new Error("公開カタログに含めてはいけないキーがあります: " + path + "." + key);
+			}
+			scan(value[key], path ? path + "." + key : key);
+		});
+	};
+	scan(snapshot, "catalog");
+	return true;
+}
+
+function getCloudflareKvSettings() {
+	const props = PropertiesService.getScriptProperties();
+	const settings = {
+		accountId: props.getProperty("CF_ACCOUNT_ID"),
+		namespaceId: props.getProperty("CF_KV_NAMESPACE_ID"),
+		apiToken: props.getProperty("CF_API_TOKEN"),
+	};
+	const missing = [];
+	if (!settings.accountId) missing.push("CF_ACCOUNT_ID");
+	if (!settings.namespaceId) missing.push("CF_KV_NAMESPACE_ID");
+	if (!settings.apiToken) missing.push("CF_API_TOKEN");
+	if (missing.length > 0) {
+		throw new Error("Cloudflare KV設定が不足しています: " + missing.join(", "));
+	}
+	return settings;
+}
+
+function hasCloudflareKvSettings() {
+	const props = PropertiesService.getScriptProperties();
+	return (
+		!!props.getProperty("CF_ACCOUNT_ID") &&
+		!!props.getProperty("CF_KV_NAMESPACE_ID") &&
+		!!props.getProperty("CF_API_TOKEN")
+	);
+}
+
+function cloudflareKvValueUrl(key) {
+	const settings = getCloudflareKvSettings();
+	return (
+		"https://api.cloudflare.com/client/v4/accounts/" +
+		encodeURIComponent(settings.accountId) +
+		"/storage/kv/namespaces/" +
+		encodeURIComponent(settings.namespaceId) +
+		"/values/" +
+		encodeURIComponent(key)
+	);
+}
+
+function cloudflareKvRequest(method, key, payload) {
+	const settings = getCloudflareKvSettings();
+	const options = {
+		method,
+		muteHttpExceptions: true,
+		headers: {
+			Authorization: "Bearer " + settings.apiToken,
+		},
+	};
+	if (payload !== undefined) {
+		options.contentType = "application/json";
+		options.payload = payload;
+	}
+
+	const response = UrlFetchApp.fetch(cloudflareKvValueUrl(key), options);
+	const code = response.getResponseCode();
+	const text = response.getContentText();
+	if (method === "get" && code === 404) return null;
+	if (code < 200 || code >= 300) {
+		throw new Error("Cloudflare KV " + method + " failed: HTTP " + code + " / " + text);
+	}
+	if (method !== "get" && text) {
+		let parsed = null;
+		try {
+			parsed = JSON.parse(text);
+		} catch (e) {
+			parsed = null;
+		}
+		if (parsed && parsed.success === false) {
+			throw new Error("Cloudflare KV " + method + " failed: " + JSON.stringify(parsed.errors || parsed));
+		}
+	}
+	return text;
+}
+
+function cloudflareKvGet(key) {
+	return cloudflareKvRequest("get", key);
+}
+
+function cloudflareKvPut(key, value) {
+	return cloudflareKvRequest("put", key, value);
+}
+
+function publishPublicCatalogToKv(reason) {
+	const snapshot = buildPublicCatalogSnapshot();
+	const json = JSON.stringify(snapshot);
+	const liveKey = PUBLIC_CATALOG_KV.liveKey;
+	const stagingKey = PUBLIC_CATALOG_KV.stagingKey;
+	const backupKey = PUBLIC_CATALOG_KV.backupPrefix + snapshot.version;
+	const props = PropertiesService.getScriptProperties();
+
+	const current = cloudflareKvGet(liveKey);
+	if (current) {
+		cloudflareKvPut(backupKey, current);
+	}
+
+	cloudflareKvPut(stagingKey, json);
+	const staged = cloudflareKvGet(stagingKey);
+	if (!staged) throw new Error("KV staging の読み戻しに失敗しました");
+	const stagedSnapshot = JSON.parse(staged);
+	validatePublicCatalogSnapshot(stagedSnapshot);
+	if (stagedSnapshot.version !== snapshot.version) {
+		throw new Error("KV staging の version が一致しません");
+	}
+
+	cloudflareKvPut(liveKey, staged);
+	props.deleteProperty(PUBLIC_CATALOG_KV.dirtyKey);
+	props.deleteProperty(PUBLIC_CATALOG_KV.dirtyReasonKey);
+	props.deleteProperty(PUBLIC_CATALOG_KV.dirtyAtKey);
+	props.setProperty(PUBLIC_CATALOG_KV.lastPublishedAtKey, snapshot.generatedAt);
+	props.setProperty(PUBLIC_CATALOG_KV.lastPublishedVersionKey, snapshot.version);
+
+	writeLog(
+		"INFO",
+		"publishPublicCatalogToKv",
+		"KV公開カタログ更新完了 - version=" +
+			snapshot.version +
+			" / reason=" +
+			(reason || "(none)") +
+			" / bytes=" +
+			json.length,
+	);
+	return {
+		success: true,
+		version: snapshot.version,
+		generatedAt: snapshot.generatedAt,
+		backupKey: current ? backupKey : "",
+		bytes: json.length,
+	};
+}
+
+function markPublicCatalogDirty(reason) {
+	const props = PropertiesService.getScriptProperties();
+	props.setProperty(PUBLIC_CATALOG_KV.dirtyKey, "1");
+	props.setProperty(PUBLIC_CATALOG_KV.dirtyReasonKey, reason || "(no reason)");
+	props.setProperty(PUBLIC_CATALOG_KV.dirtyAtKey, new Date().toISOString());
+	Logger.log("[publicCatalog] dirty: " + (reason || "(no reason)"));
+}
+
+function publishDirtyPublicCatalog() {
+	const props = PropertiesService.getScriptProperties();
+	if (props.getProperty(PUBLIC_CATALOG_KV.dirtyKey) !== "1") {
+		return { skipped: true, reason: "not dirty" };
+	}
+	if (!hasCloudflareKvSettings()) {
+		return { skipped: true, reason: "Cloudflare KV settings are missing" };
+	}
+	const reason = props.getProperty(PUBLIC_CATALOG_KV.dirtyReasonKey) || "dirty trigger";
+	return publishPublicCatalogToKv(reason);
+}
+
+function restorePublicCatalogFromBackup(version) {
+	if (!version) throw new Error("復元するバックアップ version を指定してください");
+	const backupKey =
+		String(version).indexOf(PUBLIC_CATALOG_KV.backupPrefix) === 0
+			? String(version)
+			: PUBLIC_CATALOG_KV.backupPrefix + String(version);
+	const backup = cloudflareKvGet(backupKey);
+	if (!backup) throw new Error("バックアップが見つかりません: " + backupKey);
+	const snapshot = JSON.parse(backup);
+	validatePublicCatalogSnapshot(snapshot);
+	cloudflareKvPut(PUBLIC_CATALOG_KV.stagingKey, backup);
+	cloudflareKvPut(PUBLIC_CATALOG_KV.liveKey, backup);
+	PropertiesService.getScriptProperties().setProperty(
+		PUBLIC_CATALOG_KV.lastPublishedVersionKey,
+		snapshot.version || backupKey,
+	);
+	writeLog("WARN", "restorePublicCatalogFromBackup", "KV公開カタログを復元: " + backupKey);
+	return { success: true, restoredFrom: backupKey, version: snapshot.version || "" };
+}
+
+function setupPublicCatalogPublishTrigger() {
+	ScriptApp.getProjectTriggers().forEach((trigger) => {
+		if (trigger.getHandlerFunction() === "publishDirtyPublicCatalog") {
+			ScriptApp.deleteTrigger(trigger);
+		}
+	});
+	ScriptApp.newTrigger("publishDirtyPublicCatalog").timeBased().everyMinutes(1).create();
+	return { success: true, handler: "publishDirtyPublicCatalog", everyMinutes: 1 };
+}
+
+// ----------------------------------------------------
 // 購入履歴シートに書き込む行配列を構築する（純関数・テスト対象）
 // 列: 注文ID, タイムスタンプ, メール, スクール, 氏名, SKU, 注文数,
 //     支払金額小計, 最終支払額, ステータス, LINE UserID
@@ -702,6 +964,7 @@ function submitOrder(payload) {
 		});
 		// 在庫キャッシュを無効化（onEdit はプログラム書込では発火しないため明示的に呼ぶ）
 		invalidatePersistent(CACHE_KEYS.inventory);
+		markPublicCatalogDirty("submitOrder inventory update: " + orderId);
 		Logger.log("[submitOrder] 在庫引き当て完了");
 
 		// 4. 購入履歴への一括書き込み
@@ -750,8 +1013,20 @@ function submitOrder(payload) {
 				" / 合計: ¥" +
 				finalTotalAmount.toLocaleString(),
 		);
+		try {
+			publishDirtyPublicCatalog();
+		} catch (kvError) {
+			writeLog(
+				"WARN",
+				"submitOrder",
+				"KV公開カタログ更新エラー（注文は完了） - 注文ID: " +
+					orderId +
+					" / " +
+					kvError.message,
+			);
+		}
 
-		// 金額表記用の文字列作成 (割引の有無で分岐)
+			// 金額表記用の文字列作成 (割引の有無で分岐)
 		let amountText = `【小計金額】 ¥${subtotalAmount.toLocaleString()}\n`;
 		if (discountAmount > 0) {
 			amountText += `【会員特典割引】 -¥${discountAmount.toLocaleString()} (${discountRate}%OFF)\n`;
@@ -992,9 +1267,10 @@ function generateSKUs(isAuto) {
 		inventorySheet
 			.getRange(inventorySheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
 			.setValues(newRows);
-		// 商品在庫シートにプログラム書き込みしたので在庫キャッシュを無効化
-		invalidatePersistent(CACHE_KEYS.inventory);
-		if (!isAutoRun) {
+			// 商品在庫シートにプログラム書き込みしたので在庫キャッシュを無効化
+			invalidatePersistent(CACHE_KEYS.inventory);
+			markPublicCatalogDirty("generateSKUs inventory rows: " + newRows.length);
+			if (!isAutoRun) {
 			SpreadsheetApp.getUi().alert(
 				`${newRows.length}件の新しいSKUを追加しました。\n在庫数を入力してください。`,
 			);
@@ -1235,6 +1511,9 @@ function onEdit(e) {
 	if (cacheKeys) {
 		cacheKeys.forEach(invalidatePersistent);
 	}
+	if (PUBLIC_CATALOG_SHEETS[sheetName]) {
+		markPublicCatalogDirty("sheet edit: " + sheetName);
+	}
 
 	// 商品一覧シートが編集された場合はSKUを自動展開
 	if (sheetName === "商品一覧") {
@@ -1369,12 +1648,14 @@ function onOpen() {
 	ui.createMenu("🛍️ 物販システム管理")
 		.addItem("SKUを在庫シートに自動展開", "generateSKUs")
 		.addSeparator()
-		.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
-		.addSeparator()
-		.addItem("🔄 キャッシュを全クリア", "invalidateAllCaches")
-		.addSeparator()
-		.addItem("📊 購入履歴を最終支払額形式へ移行（1回のみ）", "migrateHistoryFinalAmount")
-		.addToUi();
+			.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
+			.addSeparator()
+			.addItem("🔄 キャッシュを全クリア", "invalidateAllCaches")
+			.addItem("☁️ KV公開カタログを手動更新", "publishPublicCatalogToKv")
+			.addItem("⏱️ KV更新トリガーをセットアップ", "setupPublicCatalogPublishTrigger")
+			.addSeparator()
+			.addItem("📊 購入履歴を最終支払額形式へ移行（1回のみ）", "migrateHistoryFinalAmount")
+			.addToUi();
 }
 
 // ============================================================

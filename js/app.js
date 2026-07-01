@@ -12,10 +12,77 @@ let customerInfo = { email: "", school: "", memberName: "" };
 let currentCategory = "すべて";
 let isProductLoaded = false; // 商品データ取得完了フラグ
 let memberDiscountRate = 0; // 会員特典情報シートから取得した割引率（%）
+let currentCatalogVersion = ""; // Cloudflare KV カタログのバージョン
 
 // ============================================================
 // 初期化（ページ読み込み時）
 // ============================================================
+
+async function fetchJsonWithTimeout(url, timeoutMs) {
+	const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+	const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+	try {
+		const res = await fetch(url, {
+			cache: "no-store",
+			signal: controller ? controller.signal : undefined,
+		});
+		if (!res.ok) throw new Error("HTTP " + res.status);
+		return await res.json();
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+function normalizeInitialPayload(payload, options = {}) {
+	const strict = options.strict === true;
+	if (!payload || typeof payload !== "object") {
+		throw new Error("初期データの形式が不正です");
+	}
+	if (strict && !Array.isArray(payload.products)) {
+		throw new Error("KVカタログに products がありません");
+	}
+	if (strict && !Array.isArray(payload.schools)) {
+		throw new Error("KVカタログに schools がありません");
+	}
+
+	let discountRate = payload.discountRate;
+	if (typeof discountRate === "number") {
+		discountRate = { discountRate };
+	}
+	if (!discountRate || typeof discountRate !== "object") {
+		discountRate = { discountRate: 0 };
+	}
+
+	return {
+		products: Array.isArray(payload.products) ? payload.products : [],
+		schools: Array.isArray(payload.schools) ? payload.schools : [],
+		discountRate,
+		productsError: payload.productsError || "",
+		schoolsError: payload.schoolsError || "",
+		discountRateError: payload.discountRateError || "",
+		catalogVersion: payload.version || payload.catalogVersion || "",
+		generatedAt: payload.generatedAt || "",
+		source: options.source || "gas",
+	};
+}
+
+async function loadInitialAppData() {
+	const useKvCatalog = typeof USE_KV_CATALOG !== "undefined" && USE_KV_CATALOG;
+	if (useKvCatalog) {
+		try {
+			const timeoutMs =
+				typeof CATALOG_FETCH_TIMEOUT_MS !== "undefined" ? CATALOG_FETCH_TIMEOUT_MS : 2500;
+			const catalog = await fetchJsonWithTimeout(PUBLIC_CATALOG_URL, timeoutMs);
+			return normalizeInitialPayload(catalog, { strict: true, source: "kv" });
+		} catch (e) {
+			console.warn("[init] KVカタログ取得に失敗。GASへフォールバックします:", e);
+		}
+	}
+
+	const initial = await gasGet("getInitialData");
+	return normalizeInitialPayload(initial, { source: "gas" });
+}
+
 window.onload = async function () {
 	// --- LocalStorage からお客様情報を復元 ---
 	const savedCustomer = localStorage.getItem("aslish_customer");
@@ -89,10 +156,11 @@ window.onload = async function () {
 	let discountData = { discountRate: 0 };
 	let productsFetchOk = false; // 元コードの「商品取得Promiseが resolve したか」相当のフラグ
 	try {
-		const initial = await gasGet("getInitialData");
-		schoolData = Array.isArray(initial.schools) ? initial.schools : [];
-		productsData = Array.isArray(initial.products) ? initial.products : [];
-		discountData = initial.discountRate || { discountRate: 0 };
+		const initial = await loadInitialAppData();
+		schoolData = initial.schools;
+		productsData = initial.products;
+		discountData = initial.discountRate;
+		currentCatalogVersion = initial.catalogVersion || "";
 		productsFetchOk = !initial.productsError;
 		if (initial.productsError) console.warn("[init] products取得エラー:", initial.productsError);
 		if (initial.schoolsError) console.warn("[init] schools取得エラー:", initial.schoolsError);
