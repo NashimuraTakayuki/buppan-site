@@ -399,6 +399,50 @@ function runAllTests() {
 		if (rateDiff) throw new Error(rateDiff);
 	});
 
+	runTest("【KV】buildPublicCatalogSnapshot() が公開カタログ形式を返す", () => {
+		if (typeof buildPublicCatalogSnapshot !== "function") {
+			skip("buildPublicCatalogSnapshot が未実装");
+		}
+		clearAllCaches();
+		const snapshot = normalizeForComparison(buildPublicCatalogSnapshot());
+		assert(snapshot.schemaVersion === 1, "schemaVersion が 1 ではありません");
+		assert(typeof snapshot.version === "string" && snapshot.version.length > 0, "version が空です");
+		assert(
+			typeof snapshot.generatedAt === "string" && snapshot.generatedAt.length > 0,
+			"generatedAt が空です",
+		);
+		const productDiff = diffDescription(loadSnapshot("products"), snapshot.products, "catalog.products");
+		if (productDiff) throw new Error(productDiff);
+		const schoolDiff = diffDescription(loadSnapshot("schools"), snapshot.schools, "catalog.schools");
+		if (schoolDiff) throw new Error(schoolDiff);
+		const rateDiff = diffDescription(
+			loadSnapshot("discountRate"),
+			snapshot.discountRate,
+			"catalog.discountRate",
+		);
+		if (rateDiff) throw new Error(rateDiff);
+	});
+
+	runTest("【KV】公開カタログ検証が秘密情報キーを拒否する", () => {
+		if (typeof validatePublicCatalogSnapshot !== "function") {
+			skip("validatePublicCatalogSnapshot が未実装");
+		}
+		let rejected = false;
+		try {
+			validatePublicCatalogSnapshot({
+				schemaVersion: 1,
+				version: "test",
+				generatedAt: new Date().toISOString(),
+				products: [],
+				schools: [{ id: "s001", name: "テスト", Messaging_API_Token: "secret" }],
+				discountRate: { discountRate: 0 },
+			});
+		} catch (e) {
+			rejected = true;
+		}
+		assert(rejected, "秘密情報キーを含むカタログが拒否されませんでした");
+	});
+
 	// --- キャッシュ動作テスト ---
 	runTest("【キャッシュ】2回目の呼び出しが1回目より速い（キャッシュヒット）", () => {
 		// 揺らぎを抑えるため複数回の中央値で比較する
@@ -568,6 +612,63 @@ function measureCurrentPerformance() {
 				")",
 		);
 	});
+}
+
+// ============================================================
+// 単体テスト：buildHistoryRows（最終支払額・ステータス先頭行記入方式）
+// ベースライン不要。GASエディタで testBuildHistoryRows() を実行する。
+// ============================================================
+function testBuildHistoryRows() {
+	const ts = new Date("2026-06-10T10:00:00+09:00");
+	const payload = {
+		customerInfo: { email: "a@example.com", school: "テスト校", memberName: "テスト太郎" },
+		lineUserId: "U123",
+		cart: [
+			{ sku: "P002-22.0", quantity: 1, price: 5400, normalPrice: 5940, productName: "x", variation: "y" },
+			{ sku: "P010-24.5", quantity: 2, price: 3300, normalPrice: 3300, productName: "x", variation: "y" },
+		],
+	};
+	// 小計 = 5400 + 6600 = 12000, 会員割引 10% = 1200, 最終 = 10800
+	const rows = buildHistoryRows("ORD-TEST01", ts, payload, 1200, 10800);
+
+	// 行構成: 商品1, タイムセール割引(商品1), 商品2, 会員特典割引 = 4行
+	assert(rows.length === 4, "行数が4であること（実際: " + rows.length + "）");
+	assert(rows.every((r) => r.length === 11), "全行が11列であること");
+
+	// 先頭行のみ最終支払額・ステータス
+	assert(rows[0][8] === 10800, "先頭行の最終支払額が10800であること（実際: " + rows[0][8] + "）");
+	assert(rows[0][9] === "未入金", "先頭行のステータスが「未入金」であること");
+	for (let i = 1; i < rows.length; i++) {
+		assert(rows[i][8] === "", i + "行目の最終支払額が空欄であること");
+		assert(rows[i][9] === "", i + "行目のステータスが空欄であること");
+	}
+
+	// 支払金額小計の合計 = 最終支払額（タイムセール540引き＋会員割引1200引き）
+	const subtotalSum = rows.reduce((s, r) => s + Number(r[7]), 0);
+	assert(subtotalSum === 10800, "支払金額小計のSUMが最終支払額と一致すること（実際: " + subtotalSum + "）");
+
+	// 割引行の内容
+	assert(String(rows[1][5]).indexOf("タイムセール割引") === 0, "2行目がタイムセール割引行であること");
+	assert(rows[1][7] === -540, "タイムセール割引が-540であること（実際: " + rows[1][7] + "）");
+	assert(rows[3][5] === "会員特典割引", "4行目が会員特典割引行であること");
+	assert(rows[3][7] === -1200, "会員特典割引が-1200であること");
+
+	// 割引なし・1商品・LINE未連携
+	const simple = buildHistoryRows(
+		"ORD-TEST02",
+		ts,
+		{
+			customerInfo: { email: "b@example.com", school: "s", memberName: "n" },
+			cart: [{ sku: "P001", quantity: 1, price: 3300 }],
+		},
+		0,
+		3300,
+	);
+	assert(simple.length === 1, "割引なし注文は1行であること");
+	assert(simple[0][8] === 3300 && simple[0][9] === "未入金", "1行注文も先頭行に最終支払額・ステータスが入ること");
+	assert(simple[0][10] === "", "LINE未連携時はLINE UserIDが空欄であること");
+
+	Logger.log("✅ testBuildHistoryRows: 全アサーション PASS");
 }
 
 /**

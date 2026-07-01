@@ -1,0 +1,10 @@
+name = "buppan-catalog-api"
+main = "workers/catalog-worker.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+# Copy this file to wrangler.toml, then replace the namespace id.
+# To serve the existing site URL, bind this Worker to a route that handles /catalog.
+[[kv_namespaces]]
+binding = "PUBLIC_CATALOG_KV"
+id = "REPLACE_WITH_BUPPAN_PUBLIC_CATALOG_NAMESPACE_ID"
