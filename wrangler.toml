@@ -9,4 +9,4 @@ workers_dev = true
 #
 # [[kv_namespaces]]
 # binding = "PUBLIC_CATALOG_KV"
-# id = "REPLACE_WITH_BUPPAN_PUBLIC_CATALOG_NAMESPACE_ID"
+# id = "buppan-public-catalog"
