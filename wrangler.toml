@@ -6,7 +6,7 @@ workers_dev = true
 # Add the KV binding after creating the namespace in Cloudflare.
 # Keeping this file deployable without a placeholder ID prevents
 # `npx wrangler versions upload` from failing before the namespace exists.
-#
-# [[kv_namespaces]]
-# binding = "PUBLIC_CATALOG_KV"
-# id = "buppan-public-catalog"
+
+[[kv_namespaces]]
+binding = "PUBLIC_CATALOG_KV"
+id = "buppan-public-catalog"

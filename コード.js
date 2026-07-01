@@ -724,6 +724,10 @@ function publishPublicCatalogToKv(reason) {
 	};
 }
 
+function publishInitialPublicCatalogToKv() {
+	return publishPublicCatalogToKv("initial");
+}
+
 function markPublicCatalogDirty(reason) {
 	const props = PropertiesService.getScriptProperties();
 	props.setProperty(PUBLIC_CATALOG_KV.dirtyKey, "1");
@@ -1651,7 +1655,7 @@ function onOpen() {
 			.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
 			.addSeparator()
 			.addItem("🔄 キャッシュを全クリア", "invalidateAllCaches")
-			.addItem("☁️ KV公開カタログを手動更新", "publishPublicCatalogToKv")
+			.addItem("☁️ KV公開カタログを手動更新", "publishInitialPublicCatalogToKv")
 			.addItem("⏱️ KV更新トリガーをセットアップ", "setupPublicCatalogPublishTrigger")
 			.addSeparator()
 			.addItem("📊 購入履歴を最終支払額形式へ移行（1回のみ）", "migrateHistoryFinalAmount")
