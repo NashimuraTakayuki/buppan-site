@@ -74,6 +74,11 @@ const CONFIG_DEFAULTS = {
 			"rNhZPNlb4KrpNO5C/bWejdweak8hbnjVblBDE+guMphhtvzrzAULWcIdOwgCXdXHOHXJRr8UHglys10eHh4tCrJAw0n2Tpmi3uPbo1Vre7zs77yy3c2YwSFdZX/7KUo+mnw1Yh27b7r3yuRkRgub0gdB04t89/1O/w1cDnyilFU=",
 		adminLineUserId: "Ud97518e18c40d4de6d83537a7a05d6c1",
 	},
+	notification: {
+		// 注文発生時の管理者宛通知メールの宛先（カンマ区切りで複数指定可）
+		// 通常は「システム設定」シートの notification.adminEmails で管理する
+		adminEmails: "",
+	},
 };
 
 // ============================================================
@@ -106,6 +111,7 @@ function getConfig() {
 			ov("lineLogin.redirectUri", config);
 			ov("defaultNotification.messagingApiToken", config);
 			ov("defaultNotification.adminLineUserId", config);
+			ov("notification.adminEmails", config);
 		} catch (e) {
 			Logger.log("[getConfig] シート読み込みエラー（デフォルト値を使用）: " + e.message);
 		}
@@ -507,6 +513,64 @@ function getProductAndInventoryData() {
 }
 
 // ----------------------------------------------------
+// 購入履歴シートに書き込む行配列を構築する（純関数・テスト対象）
+// 列: 注文ID, タイムスタンプ, メール, スクール, 氏名, SKU, 注文数,
+//     支払金額小計, 最終支払額, ステータス, LINE UserID
+// 最終支払額・ステータス（未入金）は注文の先頭行のみに記入し、
+// 明細行（タイムセール割引・会員特典割引・2品目以降）は空欄とする
+// ----------------------------------------------------
+function buildHistoryRows(orderId, timestamp, payload, discountAmount, finalTotalAmount) {
+	const rows = [];
+	const base = [
+		orderId,
+		timestamp,
+		payload.customerInfo.email,
+		payload.customerInfo.school,
+		payload.customerInfo.memberName,
+	];
+	const lineUserId = payload.lineUserId || "";
+
+	payload.cart.forEach((item) => {
+		const normalSubtotal = (item.normalPrice || item.price) * item.quantity;
+		const timesaleDiscount = normalSubtotal - item.price * item.quantity;
+		const isFirstRow = rows.length === 0;
+
+		// 1. 商品行（通常価格で記録）
+		rows.push(
+			base.concat([
+				item.sku,
+				item.quantity,
+				normalSubtotal,
+				isFirstRow ? finalTotalAmount : "",
+				isFirstRow ? "未入金" : "",
+				lineUserId,
+			]),
+		);
+
+		// 2. タイムセール割引行（別の行として記録。支払金額小計にマイナス差分を入れる）
+		if (timesaleDiscount > 0) {
+			rows.push(
+				base.concat([
+					`タイムセール割引 (${item.sku})`,
+					item.quantity,
+					-timesaleDiscount,
+					"",
+					"",
+					lineUserId,
+				]),
+			);
+		}
+	});
+
+	// 3. 会員特典割引行（支払金額小計にマイナス値を設定）
+	if (discountAmount > 0) {
+		rows.push(base.concat(["会員特典割引", 1, -discountAmount, "", "", lineUserId]));
+	}
+
+	return rows;
+}
+
+// ----------------------------------------------------
 // カートの一括注文と個人情報を処理する関数
 // ----------------------------------------------------
 function submitOrder(payload) {
@@ -535,6 +599,7 @@ function submitOrder(payload) {
 		"SKU",
 		"注文数",
 		"支払金額小計",
+		"最終支払額",
 		"ステータス",
 		"LINE UserID",
 	];
@@ -548,8 +613,15 @@ function submitOrder(payload) {
 		const currentHeaders = historySheet
 			.getRange(1, 1, 1, historySheet.getLastColumn())
 			.getValues()[0];
+		// 「最終支払額」列がない旧形式の場合は、既存データの整合を保つため
+		// 「支払金額小計」の右に列を挿入してからヘッダーを更新する
+		if (currentHeaders.indexOf("最終支払額") === -1 && currentHeaders.indexOf("支払金額小計") !== -1) {
+			historySheet.insertColumnAfter(currentHeaders.indexOf("支払金額小計") + 1);
+			Logger.log("[submitOrder] 購入履歴シートに「最終支払額」列を挿入");
+		}
 		if (
 			currentHeaders.indexOf("支払金額小計") === -1 ||
+			currentHeaders.indexOf("最終支払額") === -1 ||
 			currentHeaders.length !== historyHeaders.length
 		) {
 			historySheet.getRange(1, 1, 1, historyHeaders.length).setValues([historyHeaders]);
@@ -642,61 +714,34 @@ function submitOrder(payload) {
 		const discountAmount = discountRate > 0 ? Math.round(subtotalAmount * (discountRate / 100)) : 0;
 		const finalTotalAmount = subtotalAmount - discountAmount;
 
-		const rowsToAppend = [];
-		payload.cart.forEach((item) => {
-			const normalSubtotal = (item.normalPrice || item.price) * item.quantity;
-			const timesaleDiscount = normalSubtotal - item.price * item.quantity;
+		const rowsToAppend = buildHistoryRows(orderId, timestamp, payload, discountAmount, finalTotalAmount);
 
-			// 1. 商品行（通常価格で記録）
-			rowsToAppend.push([
-				orderId,
-				timestamp,
-				payload.customerInfo.email,
-				payload.customerInfo.school,
-				payload.customerInfo.memberName,
-				item.sku,
-				item.quantity,
-				normalSubtotal,
-				"未入金",
-				payload.lineUserId || "",
-			]);
+		const startRow = historySheet.getLastRow() + 1;
+		historySheet
+			.getRange(startRow, 1, rowsToAppend.length, rowsToAppend[0].length)
+			.setValues(rowsToAppend);
 
-			// 2. タイムセール割引行（別の行として記録。支払金額小計にマイナス差分を入れる）
-			if (timesaleDiscount > 0) {
-				rowsToAppend.push([
-					orderId,
-					timestamp,
-					payload.customerInfo.email,
-					payload.customerInfo.school,
-					payload.customerInfo.memberName,
-					`タイムセール割引 (${item.sku})`,
-					item.quantity,
-					-timesaleDiscount,
-					"未入金",
-					payload.lineUserId || "",
-				]);
+		// 最終支払額列の強調書式（列は背景色、金額セルは太字）
+		try {
+			const finalCol = historyHeaders.indexOf("最終支払額") + 1;
+			historySheet.getRange(startRow, finalCol, rowsToAppend.length, 1).setBackground("#FAEEDA");
+			historySheet.getRange(startRow, finalCol).setFontWeight("bold");
+
+			// 明細行（先頭行以外）をグループ化して折りたたむ
+			if (rowsToAppend.length > 1) {
+				const detailRange = historySheet.getRange(startRow + 1, 1, rowsToAppend.length - 1, 1);
+				detailRange.shiftRowGroupDepth(1);
+				detailRange.collapseGroups();
 			}
-		});
-
-		if (discountAmount > 0) {
-			// 3. 会員特典割引行の追加（支払金額小計にマイナス値を設定）
-			rowsToAppend.push([
-				orderId,
-				timestamp,
-				payload.customerInfo.email,
-				payload.customerInfo.school,
-				payload.customerInfo.memberName,
-				"会員特典割引",
-				1,
-				-discountAmount,
-				"未入金",
-				payload.lineUserId || "",
-			]);
+		} catch (formatError) {
+			// 書式・グループ化の失敗は注文成立に影響させない
+			writeLog(
+				"WARN",
+				"submitOrder",
+				"書式・グループ化エラー（注文は完了） - 注文ID: " + orderId + " / " + formatError.message,
+			);
 		}
 
-		historySheet
-			.getRange(historySheet.getLastRow() + 1, 1, rowsToAppend.length, rowsToAppend[0].length)
-			.setValues(rowsToAppend);
 		writeLog(
 			"INFO",
 			"submitOrder",
@@ -762,16 +807,17 @@ function submitOrder(payload) {
 		// スクールID（payload.lineSource）優先で設定検索、なければスクール名で検索
 		const schoolIdentifier = payload.lineSource || payload.customerInfo.school;
 		const schoolConfig = getSchoolConfig(schoolIdentifier);
+		// 管理者向け通知本文（LINE・メール共通）
+		const adminMessage =
+			`🛍️ 新規注文が入りました！\n\n` +
+			`【注文ID】 ${orderId}\n` +
+			`【注文日時】 ${Utilities.formatDate(timestamp, "Asia/Tokyo", "yyyy/MM/dd HH:mm")}\n` +
+			`【氏名】 ${payload.customerInfo.memberName}\n` +
+			`【スクール】 ${payload.customerInfo.school}\n` +
+			`【メール】 ${payload.customerInfo.email}\n\n` +
+			`【注文商品】\n${itemLinesSimple}\n\n` +
+			amountText;
 		try {
-			const adminMessage =
-				`🛍️ 新規注文が入りました！\n\n` +
-				`【注文ID】 ${orderId}\n` +
-				`【注文日時】 ${Utilities.formatDate(timestamp, "Asia/Tokyo", "yyyy/MM/dd HH:mm")}\n` +
-				`【氏名】 ${payload.customerInfo.memberName}\n` +
-				`【スクール】 ${payload.customerInfo.school}\n` +
-				`【メール】 ${payload.customerInfo.email}\n\n` +
-				`【注文商品】\n${itemLinesSimple}\n\n` +
-				amountText;
 			sendLineNotification(schoolConfig.adminId, adminMessage, schoolConfig.token);
 			writeLog(
 				"INFO",
@@ -789,6 +835,39 @@ function submitOrder(payload) {
 					schoolIdentifier +
 					" / " +
 					lineError.message,
+			);
+		}
+
+		// 6.5. 管理者への通知メール（LINE通知と併存。宛先は「システム設定」シートで管理）
+		try {
+			const adminEmails = String(getConfig().notification.adminEmails || "")
+				.split(",")
+				.map((addr) => addr.trim())
+				.filter((addr) => addr);
+			if (adminEmails.length === 0) {
+				writeLog(
+					"WARN",
+					"submitOrder",
+					"管理者通知メールの宛先未設定のため送信スキップ（システム設定シートの notification.adminEmails を設定してください） - 注文ID: " +
+						orderId,
+				);
+			} else {
+				MailApp.sendEmail({
+					to: adminEmails.join(","),
+					subject: `【アスリッシュ物販】新規注文のお知らせ（注文ID: ${orderId}）`,
+					body: adminMessage,
+				});
+				writeLog(
+					"INFO",
+					"submitOrder",
+					"管理者通知メール送信完了 - 宛先: " + adminEmails.join(",") + " / 注文ID: " + orderId,
+				);
+			}
+		} catch (adminMailError) {
+			writeLog(
+				"ERROR",
+				"submitOrder",
+				"管理者通知メールエラー（注文は完了） - 注文ID: " + orderId + " / " + adminMailError.message,
 			);
 		}
 
@@ -1293,7 +1372,127 @@ function onOpen() {
 		.addItem("🖼️ 商品画像をアップロード", "openUploadDialog")
 		.addSeparator()
 		.addItem("🔄 キャッシュを全クリア", "invalidateAllCaches")
+		.addSeparator()
+		.addItem("📊 購入履歴を最終支払額形式へ移行（1回のみ）", "migrateHistoryFinalAmount")
 		.addToUi();
+}
+
+// ============================================================
+// 【管理者用・1回実行】購入履歴シートを「最終支払額」形式へ移行する
+// 要件定義 v1.2 の 2-6 に基づく移行スクリプト。
+// 1. バックアップシートを作成
+// 2. 「最終支払額」列を挿入しヘッダー更新（submitOrder側の自動挿入と同一ロジック）
+// 3. 注文IDごとに支払金額小計を集計し、先頭行に最終支払額を記入（背景色＋太字）
+// 4. 先頭行以外のステータスをクリア（食い違いはWARNログに記録）
+// 5. 先頭行以外をグループ化して折りたたみ
+// 6. 検証: 最終支払額列のSUM == 支払金額小計列のSUM
+// ============================================================
+function migrateHistoryFinalAmount() {
+	const ss = SpreadsheetApp.getActiveSpreadsheet();
+	const sheet = ss.getSheetByName("購入履歴");
+	if (!sheet) throw new Error("「購入履歴」シートが見つかりません");
+
+	// 1. バックアップ作成
+	const backupName =
+		"購入履歴_backup_" + Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyyMMdd_HHmmss");
+	sheet.copyTo(ss).setName(backupName);
+	Logger.log("[migrate] バックアップ作成: " + backupName);
+
+	// 2. 「最終支払額」列の挿入（未挿入の場合のみ）
+	let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+	if (headers.indexOf("最終支払額") === -1) {
+		const subtotalIdx = headers.indexOf("支払金額小計");
+		if (subtotalIdx === -1) throw new Error("「支払金額小計」列が見つかりません");
+		sheet.insertColumnAfter(subtotalIdx + 1);
+		sheet.getRange(1, subtotalIdx + 2).setValue("最終支払額");
+		headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+	}
+	const orderIdCol = headers.indexOf("注文ID") + 1;
+	const subtotalCol = headers.indexOf("支払金額小計") + 1;
+	const finalCol = headers.indexOf("最終支払額") + 1;
+	const statusCol = headers.indexOf("ステータス") + 1;
+
+	const lastRow = sheet.getLastRow();
+	if (lastRow < 2) {
+		Logger.log("[migrate] データ行なし。列挿入のみで終了");
+		return;
+	}
+	const numRows = lastRow - 1;
+	const data = sheet.getRange(2, 1, numRows, sheet.getLastColumn()).getValues();
+
+	// 3〜4. 注文IDごとに集計（行は注文IDごとに連続している前提。念のため非連続もキー単位で集計）
+	const finalValues = []; // 最終支払額列の新しい値
+	const statusValues = []; // ステータス列の新しい値
+	const firstRowByOrder = {}; // 注文ID -> 先頭行index(0始まり)
+	const totalByOrder = {};
+	const statusByOrder = {};
+	const mismatches = [];
+
+	data.forEach((row, i) => {
+		const oid = String(row[orderIdCol - 1]);
+		const subtotal = Number(row[subtotalCol - 1]) || 0;
+		const status = String(row[statusCol - 1] || "").trim();
+		if (!(oid in firstRowByOrder)) {
+			firstRowByOrder[oid] = i;
+			totalByOrder[oid] = 0;
+			statusByOrder[oid] = status;
+		} else if (status && status !== statusByOrder[oid]) {
+			mismatches.push(
+				`注文ID ${oid}: 行${i + 2} のステータス「${status}」が先頭行「${statusByOrder[oid]}」と不一致`,
+			);
+		}
+		totalByOrder[oid] += subtotal;
+	});
+
+	data.forEach((row, i) => {
+		const oid = String(row[orderIdCol - 1]);
+		const isFirst = firstRowByOrder[oid] === i;
+		finalValues.push([isFirst ? totalByOrder[oid] : ""]);
+		statusValues.push([isFirst ? statusByOrder[oid] : ""]);
+	});
+
+	sheet.getRange(2, finalCol, numRows, 1).setValues(finalValues);
+	sheet.getRange(2, statusCol, numRows, 1).setValues(statusValues);
+
+	// 最終支払額列の強調書式（列全体に背景色、金額セルのみ太字）
+	sheet.getRange(1, finalCol, lastRow, 1).setBackground("#FAEEDA").setFontWeight("normal");
+	Object.keys(firstRowByOrder).forEach((oid) => {
+		sheet.getRange(firstRowByOrder[oid] + 2, finalCol).setFontWeight("bold");
+	});
+
+	// 5. グループ化（注文IDが連続する塊ごとに、先頭行以外をグループ化して折りたたみ）
+	let blockStart = 0; // 0始まり data index
+	for (let i = 1; i <= numRows; i++) {
+		const prevOid = String(data[i - 1][orderIdCol - 1]);
+		const curOid = i < numRows ? String(data[i][orderIdCol - 1]) : null;
+		if (curOid !== prevOid) {
+			const blockLen = i - blockStart;
+			if (blockLen > 1) {
+				const detailRange = sheet.getRange(blockStart + 3, 1, blockLen - 1, 1);
+				detailRange.shiftRowGroupDepth(1);
+				detailRange.collapseGroups();
+			}
+			blockStart = i;
+		}
+	}
+
+	// 4. 食い違いログ
+	mismatches.forEach((msg) => writeLog("WARN", "migrateHistoryFinalAmount", msg));
+
+	// 6. 検証
+	const subtotalSum = data.reduce((sum, row) => sum + (Number(row[subtotalCol - 1]) || 0), 0);
+	const finalSum = Object.values(totalByOrder).reduce((sum, v) => sum + v, 0);
+	const ok = subtotalSum === finalSum;
+	writeLog(
+		ok ? "INFO" : "ERROR",
+		"migrateHistoryFinalAmount",
+		`移行完了 - 注文数: ${Object.keys(firstRowByOrder).length} / 小計SUM: ${subtotalSum} / 最終支払額SUM: ${finalSum} / 検証: ${ok ? "OK" : "NG"} / ステータス食い違い: ${mismatches.length}件`,
+	);
+	SpreadsheetApp.getUi().alert(
+		ok
+			? `移行が完了しました。\n注文数: ${Object.keys(firstRowByOrder).length}\n検証OK（小計SUM=最終支払額SUM: ¥${finalSum.toLocaleString()}）\nステータス食い違い: ${mismatches.length}件（ログ参照）\nバックアップ: ${backupName}`
+			: `移行は完了しましたが検証NGです。ログを確認してください。\n小計SUM: ${subtotalSum} / 最終支払額SUM: ${finalSum}\nバックアップ: ${backupName}`,
+	);
 }
 
 // ----------------------------------------------------
