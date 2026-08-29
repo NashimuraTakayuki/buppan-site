@@ -176,7 +176,7 @@ function normalizeInitialPayload(payload, options = {}) {
 	}
 
 	return {
-		products: Array.isArray(payload.products) ? payload.products : [],
+		products: separateProductsByInventoryRows(Array.isArray(payload.products) ? payload.products : []),
 		schools: Array.isArray(payload.schools) ? payload.schools : [],
 		discountRate,
 		productsError: payload.productsError || "",
@@ -186,6 +186,26 @@ function normalizeInitialPayload(payload, options = {}) {
 		generatedAt: payload.generatedAt || "",
 		source: options.source || "gas",
 	};
+}
+
+// GAS/KVの旧カタログに複数在庫行が残っていても、1行ずつの商品データへ分離する
+function separateProductsByInventoryRows(products) {
+	const separated = [];
+	products.forEach((product) => {
+		const stockRows = Array.isArray(product.stockList) ? product.stockList : [];
+		if (stockRows.length === 0) {
+			separated.push(Object.assign({}, product, { stockList: [] }));
+			return;
+		}
+		if (stockRows.length === 1) {
+			separated.push(product);
+			return;
+		}
+		stockRows.forEach((stockRow) => {
+			separated.push(Object.assign({}, product, { stockList: [stockRow] }));
+		});
+	});
+	return separated;
 }
 
 async function loadInitialAppData() {
@@ -570,7 +590,7 @@ function renderProductGrid(category) {
 
 		const card = document.createElement("div");
 		card.className = `product-card ${isOutOfStock ? "out-of-stock" : ""}`;
-		card.onclick = () => openModal(p["商品ID"]);
+		card.onclick = () => openModal(p);
 		card.innerHTML = `
       <div>
         ${imgHtml}
@@ -789,8 +809,8 @@ function makeSizeBtnGroup(container, items, onSelect) {
 	else if (container.firstChild) container.firstChild.classList.add("selected");
 }
 
-function openModal(productId) {
-	const p = globalProducts.find((prod) => String(prod["商品ID"]) === String(productId));
+function openModal(product) {
+	const p = product;
 	if (!p) return;
 	currentSelectedProduct = p;
 	console.log(p);
