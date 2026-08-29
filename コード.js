@@ -497,40 +497,33 @@ function getInitialData() {
 }
 
 // ----------------------------------------------------
-// 商品ごとの在庫行を、在庫1行につき1商品データへ分離する
-// 在庫がない商品も stockList: [] の1件として残す
+// フロントエンドに商品と在庫の統合データを渡す関数
+// 商品マスタと在庫を別キャッシュで持ち、結合は毎回 Map ベースで行う（O(P+I)）
+// 結合時は Object.assign でシャローコピー → キャッシュオブジェクトの汚染を防止
 // ----------------------------------------------------
-function separateProductsByInventoryRows(products, inventory) {
-	const inventoryByProductId = new Map();
-	inventory.forEach((inv) => {
-		const id = String(inv["商品ID"]);
-		if (!inventoryByProductId.has(id)) inventoryByProductId.set(id, []);
-		inventoryByProductId.get(id).push(inv);
-	});
-
-	const separated = [];
-	products.forEach((product) => {
-		const stockRows = inventoryByProductId.get(String(product["商品ID"])) || [];
-		if (stockRows.length === 0) {
-			separated.push(Object.assign({}, product, { stockList: [] }));
-			return;
-		}
-		stockRows.forEach((stockRow) => {
-			separated.push(Object.assign({}, product, { stockList: [stockRow] }));
-		});
-	});
-	return separated;
-}
-
 function getProductAndInventoryData() {
 	try {
 		Logger.log("[getProductAndInventoryData] 開始");
 		const products = getProductsMaster();
 		const inventory = getInventoryData();
-		const separated = separateProductsByInventoryRows(products, inventory);
+
+		// 商品ID → 在庫リスト の Map を構築（O(I)）
+		const inventoryByProductId = new Map();
+		inventory.forEach((inv) => {
+			const id = String(inv["商品ID"]);
+			if (!inventoryByProductId.has(id)) inventoryByProductId.set(id, []);
+			inventoryByProductId.get(id).push(inv);
+		});
+
+		// 結合（O(P)）。Object.assign でシャローコピーしてキャッシュを汚染しない
+		const merged = products.map((p) =>
+			Object.assign({}, p, {
+				stockList: inventoryByProductId.get(String(p["商品ID"])) || [],
+			}),
+		);
 
 		Logger.log("[getProductAndInventoryData] 完了");
-		return separated;
+		return merged;
 	} catch (e) {
 		Logger.log("[getProductAndInventoryData] エラー: " + e.message);
 		throw e;

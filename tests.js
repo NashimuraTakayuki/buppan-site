@@ -281,28 +281,6 @@ function runAllTests() {
 	Logger.log("回帰テスト開始: " + new Date().toLocaleString("ja-JP"));
 	Logger.log("============================================");
 
-	runTest("【商品行分離】商品在庫1行につき1件を返す", () => {
-		const products = [
-			{ 商品ID: "P001", 商品名: "商品A" },
-			{ 商品ID: "P002", 商品名: "商品B" },
-		];
-		const inventory = [
-			{ 商品ID: "P001", SKU: "P001-S", 在庫数: 2 },
-			{ 商品ID: "P001", SKU: "P001-M", 在庫数: 3 },
-		];
-		const actual = separateProductsByInventoryRows(products, inventory);
-
-		assert(actual.length === 3, "在庫2行と在庫なし商品1件の計3件になっていません");
-		assert(
-			actual.every((product) => product.stockList.length <= 1),
-			"複数在庫行を持つ商品が残っています",
-		);
-		assert(actual[0].stockList[0].SKU === "P001-S", "1行目のSKUが保持されていません");
-		assert(actual[1].stockList[0].SKU === "P001-M", "2行目のSKUが保持されていません");
-		assert(actual[2].stockList.length === 0, "在庫なし商品が保持されていません");
-		assert(!("stockList" in products[0]), "商品マスタが変更されています");
-	});
-
 	// 前提チェック
 	if (!hasSnapshot("products") || !hasSnapshot("schools") || !hasSnapshot("discountRate")) {
 		Logger.log("");
