@@ -281,6 +281,8 @@ function runAllTests() {
 	Logger.log("回帰テスト開始: " + new Date().toLocaleString("ja-JP"));
 	Logger.log("============================================");
 
+	runTest("【通知設定】購入者メールの既定値と真偽値変換", testCustomerEmailEnabledSetting);
+
 	// 前提チェック
 	if (!hasSnapshot("products") || !hasSnapshot("schools") || !hasSnapshot("discountRate")) {
 		Logger.log("");
@@ -669,6 +671,25 @@ function testBuildHistoryRows() {
 	assert(simple[0][10] === "", "LINE未連携時はLINE UserIDが空欄であること");
 
 	Logger.log("✅ testBuildHistoryRows: 全アサーション PASS");
+}
+
+// ============================================================
+// 単体テスト：購入者向け確認メール設定
+// ============================================================
+function testCustomerEmailEnabledSetting() {
+	assert(
+		CONFIG_DEFAULTS.notification.customerEmailEnabled === false,
+		"未設定時は購入者向けメールが無効であること",
+	);
+	assert(isConfigEnabled(true), "boolean true で有効になること");
+	assert(isConfigEnabled("true"), "文字列 true で有効になること");
+	assert(isConfigEnabled(" TRUE "), "大文字・前後空白付き TRUE で有効になること");
+	assert(!isConfigEnabled(false), "boolean false で無効になること");
+	assert(!isConfigEnabled("false"), "文字列 false で無効になること");
+	assert(!isConfigEnabled(""), "空文字で無効になること");
+	assert(!isConfigEnabled(undefined), "未定義値で無効になること");
+
+	Logger.log("✅ testCustomerEmailEnabledSetting: 全アサーション PASS");
 }
 
 /**

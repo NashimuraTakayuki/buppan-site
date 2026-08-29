@@ -93,6 +93,9 @@ const CONFIG_DEFAULTS = {
 		adminLineUserId: "Ud97518e18c40d4de6d83537a7a05d6c1",
 	},
 	notification: {
+		// 購入者宛て確認メールの送信可否（「システム設定」シートで true / false を指定）
+		// 未設定時は送信しない
+		customerEmailEnabled: false,
 		// 注文発生時の管理者宛通知メールの宛先（カンマ区切りで複数指定可）
 		// 通常は「システム設定」シートの notification.adminEmails で管理する
 		adminEmails: "",
@@ -129,12 +132,17 @@ function getConfig() {
 			ov("lineLogin.redirectUri", config);
 			ov("defaultNotification.messagingApiToken", config);
 			ov("defaultNotification.adminLineUserId", config);
+			ov("notification.customerEmailEnabled", config);
 			ov("notification.adminEmails", config);
 		} catch (e) {
 			Logger.log("[getConfig] シート読み込みエラー（デフォルト値を使用）: " + e.message);
 		}
 		return config;
 	});
+}
+
+function isConfigEnabled(value) {
+	return value === true || String(value).trim().toLowerCase() === "true";
 }
 
 // 後方互換: 既存コードが CONFIG.xxx を参照できるようエイリアスを提供
@@ -1031,43 +1039,51 @@ function submitOrder(payload) {
 		amountText += `【合計金額】 ¥${finalTotalAmount.toLocaleString()}（税込）\n`;
 
 		// 5. 購入者への確認メール送信
-		try {
-			const itemLines = payload.cart
-				.map(
-					(item) =>
-						`・${item.productName}（${item.variation}）× ${item.quantity}個　¥${(item.price * item.quantity).toLocaleString()}`,
-				)
-				.join("\n");
-			const mailBody =
-				`${payload.customerInfo.memberName} 様\n\n` +
-				`この度はご注文いただきありがとうございます。\n` +
-				`以下の内容で注文を受け付けました。\n\n` +
-				`━━━━━━━━━━━━━━━━━━\n` +
-				`【注文ID】 ${orderId}\n` +
-				`【注文日時】 ${Utilities.formatDate(timestamp, "Asia/Tokyo", "yyyy/MM/dd HH:mm")}\n` +
-				`【参加スクール】 ${payload.customerInfo.school}\n` +
-				`━━━━━━━━━━━━━━━━━━\n\n` +
-				`【ご注文商品】\n${itemLines}\n\n` +
-				amountText +
-				`\n` +
-				`━━━━━━━━━━━━━━━━━━\n` +
-				`※お支払いは月会費と合わせてご案内いたします。\n\n` +
-				`アスリッシュ陸上スクール`;
-			MailApp.sendEmail({
-				to: payload.customerInfo.email,
-				subject: `【アスリッシュ物販】ご注文受付のお知らせ（注文ID: ${orderId}）`,
-				body: mailBody,
-			});
-			Logger.log("[submitOrder] 確認メール送信完了 - 宛先: " + payload.customerInfo.email);
-		} catch (mailError) {
-			// メール送信に失敗しても注文自体は成功扱いにする
+		if (isConfigEnabled(getConfig().notification.customerEmailEnabled)) {
+			try {
+				const itemLines = payload.cart
+					.map(
+						(item) =>
+							`・${item.productName}（${item.variation}）× ${item.quantity}個　¥${(item.price * item.quantity).toLocaleString()}`,
+					)
+					.join("\n");
+				const mailBody =
+					`${payload.customerInfo.memberName} 様\n\n` +
+					`この度はご注文いただきありがとうございます。\n` +
+					`以下の内容で注文を受け付けました。\n\n` +
+					`━━━━━━━━━━━━━━━━━━\n` +
+					`【注文ID】 ${orderId}\n` +
+					`【注文日時】 ${Utilities.formatDate(timestamp, "Asia/Tokyo", "yyyy/MM/dd HH:mm")}\n` +
+					`【参加スクール】 ${payload.customerInfo.school}\n` +
+					`━━━━━━━━━━━━━━━━━━\n\n` +
+					`【ご注文商品】\n${itemLines}\n\n` +
+					amountText +
+					`\n` +
+					`━━━━━━━━━━━━━━━━━━\n` +
+					`※お支払いは月会費と合わせてご案内いたします。\n\n` +
+					`アスリッシュ陸上スクール`;
+				MailApp.sendEmail({
+					to: payload.customerInfo.email,
+					subject: `【アスリッシュ物販】ご注文受付のお知らせ（注文ID: ${orderId}）`,
+					body: mailBody,
+				});
+				Logger.log("[submitOrder] 確認メール送信完了 - 宛先: " + payload.customerInfo.email);
+			} catch (mailError) {
+				// メール送信に失敗しても注文自体は成功扱いにする
+				writeLog(
+					"ERROR",
+					"submitOrder",
+					"メール送信エラー（注文は完了） - 宛先: " +
+						payload.customerInfo.email +
+						" / " +
+						mailError.message,
+				);
+			}
+		} else {
 			writeLog(
-				"ERROR",
+				"INFO",
 				"submitOrder",
-				"メール送信エラー（注文は完了） - 宛先: " +
-					payload.customerInfo.email +
-					" / " +
-					mailError.message,
+				"購入者向け確認メールは設定により送信スキップ - 注文ID: " + orderId,
 			);
 		}
 
