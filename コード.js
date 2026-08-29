@@ -993,19 +993,12 @@ function submitOrder(payload) {
 			const finalCol = historyHeaders.indexOf("最終支払額") + 1;
 			historySheet.getRange(startRow, finalCol, rowsToAppend.length, 1).setBackground("#FAEEDA");
 			historySheet.getRange(startRow, finalCol).setFontWeight("bold");
-
-			// 明細行（先頭行以外）をグループ化して折りたたむ
-			if (rowsToAppend.length > 1) {
-				const detailRange = historySheet.getRange(startRow + 1, 1, rowsToAppend.length - 1, 1);
-				detailRange.shiftRowGroupDepth(1);
-				detailRange.collapseGroups();
-			}
 		} catch (formatError) {
-			// 書式・グループ化の失敗は注文成立に影響させない
+			// 書式設定の失敗は注文成立に影響させない
 			writeLog(
 				"WARN",
 				"submitOrder",
-				"書式・グループ化エラー（注文は完了） - 注文ID: " + orderId + " / " + formatError.message,
+				"書式設定エラー（注文は完了） - 注文ID: " + orderId + " / " + formatError.message,
 			);
 		}
 
@@ -1664,13 +1657,12 @@ function onOpen() {
 
 // ============================================================
 // 【管理者用・1回実行】購入履歴シートを「最終支払額」形式へ移行する
-// 要件定義 v1.2 の 2-6 に基づく移行スクリプト。
+// 要件定義 v1.2を基にし、行グループ化は行わない移行スクリプト。
 // 1. バックアップシートを作成
 // 2. 「最終支払額」列を挿入しヘッダー更新（submitOrder側の自動挿入と同一ロジック）
 // 3. 注文IDごとに支払金額小計を集計し、先頭行に最終支払額を記入（背景色＋太字）
 // 4. 先頭行以外のステータスをクリア（食い違いはWARNログに記録）
-// 5. 先頭行以外をグループ化して折りたたみ
-// 6. 検証: 最終支払額列のSUM == 支払金額小計列のSUM
+// 5. 検証: 最終支払額列のSUM == 支払金額小計列のSUM
 // ============================================================
 function migrateHistoryFinalAmount() {
 	const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1745,26 +1737,10 @@ function migrateHistoryFinalAmount() {
 		sheet.getRange(firstRowByOrder[oid] + 2, finalCol).setFontWeight("bold");
 	});
 
-	// 5. グループ化（注文IDが連続する塊ごとに、先頭行以外をグループ化して折りたたみ）
-	let blockStart = 0; // 0始まり data index
-	for (let i = 1; i <= numRows; i++) {
-		const prevOid = String(data[i - 1][orderIdCol - 1]);
-		const curOid = i < numRows ? String(data[i][orderIdCol - 1]) : null;
-		if (curOid !== prevOid) {
-			const blockLen = i - blockStart;
-			if (blockLen > 1) {
-				const detailRange = sheet.getRange(blockStart + 3, 1, blockLen - 1, 1);
-				detailRange.shiftRowGroupDepth(1);
-				detailRange.collapseGroups();
-			}
-			blockStart = i;
-		}
-	}
-
 	// 4. 食い違いログ
 	mismatches.forEach((msg) => writeLog("WARN", "migrateHistoryFinalAmount", msg));
 
-	// 6. 検証
+	// 5. 検証
 	const subtotalSum = data.reduce((sum, row) => sum + (Number(row[subtotalCol - 1]) || 0), 0);
 	const finalSum = Object.values(totalByOrder).reduce((sum, v) => sum + v, 0);
 	const ok = subtotalSum === finalSum;
