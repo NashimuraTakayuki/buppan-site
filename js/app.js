@@ -176,7 +176,7 @@ function normalizeInitialPayload(payload, options = {}) {
 	}
 
 	return {
-		products: Array.isArray(payload.products) ? payload.products : [],
+		products: groupProductsByProductId(Array.isArray(payload.products) ? payload.products : []),
 		schools: Array.isArray(payload.schools) ? payload.schools : [],
 		discountRate,
 		productsError: payload.productsError || "",
@@ -186,6 +186,32 @@ function normalizeInitialPayload(payload, options = {}) {
 		generatedAt: payload.generatedAt || "",
 		source: options.source || "gas",
 	};
+}
+
+// 商品データが在庫行単位で届いても、商品IDごとに1商品へ戻す
+function groupProductsByProductId(products) {
+	const grouped = new Map();
+	products.forEach((product) => {
+		const productId = String(product["商品ID"]);
+		if (!grouped.has(productId)) {
+			grouped.set(productId, {
+				product: Object.assign({}, product, { stockList: [] }),
+				stockKeys: new Set(),
+			});
+		}
+
+		const entry = grouped.get(productId);
+		const stockRows = Array.isArray(product.stockList) ? product.stockList : [];
+		stockRows.forEach((stockRow) => {
+			const stockKey = String(
+				stockRow["SKU"] || `${stockRow["サイズ"] || ""}|${stockRow["カラー"] || ""}`,
+			);
+			if (entry.stockKeys.has(stockKey)) return;
+			entry.stockKeys.add(stockKey);
+			entry.product.stockList.push(stockRow);
+		});
+	});
+	return Array.from(grouped.values()).map((entry) => entry.product);
 }
 
 async function loadInitialAppData() {
